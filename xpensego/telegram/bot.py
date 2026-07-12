@@ -21,8 +21,20 @@ async def _upsert_sender(update: Update, settings: Settings) -> str | None:
     return str(sender.id)
 
 
+async def _maintenance_if_paused(update: Update, settings: Settings) -> bool:
+    if not settings.bot_paused:
+        return False
+    if update.effective_message:
+        await update.effective_message.reply_text(
+            "Xpensego is temporarily under maintenance. Please try again soon."
+        )
+    return True
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     settings: Settings = context.application.bot_data["settings"]
+    if await _maintenance_if_paused(update, settings):
+        return
     await _upsert_sender(update, settings)
     if update.effective_message:
         await update.effective_message.reply_text("Xpensego is getting ready. Send ping to verify the bot.")
@@ -30,6 +42,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def ping(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     settings: Settings = context.application.bot_data["settings"]
+    if await _maintenance_if_paused(update, settings):
+        return
     await _upsert_sender(update, settings)
     if update.effective_message:
         await update.effective_message.reply_text("pong")
@@ -37,11 +51,10 @@ async def ping(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def text_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     settings: Settings = context.application.bot_data["settings"]
+    if await _maintenance_if_paused(update, settings):
+        return
     user_id = await _upsert_sender(update, settings)
     if not update.effective_message or user_id is None:
-        return
-    if settings.bot_paused:
-        await update.effective_message.reply_text("Xpensego is temporarily under maintenance. Please try again soon.")
         return
 
     text = (update.effective_message.text or "")[:4000]

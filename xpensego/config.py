@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
+from dotenv import load_dotenv
 
 
 @dataclass(frozen=True)
@@ -17,6 +18,9 @@ class Settings:
 
     @classmethod
     def from_env(cls) -> "Settings":
+        # Keep explicit environment variables authoritative, while making the local .env
+        # workflow work without requiring callers to source the file manually.
+        load_dotenv(dotenv_path=Path.cwd() / ".env", override=False)
         telegram_bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
         openai_api_key = os.getenv("OPENAI_API_KEY", "").strip()
         if not telegram_bot_token:

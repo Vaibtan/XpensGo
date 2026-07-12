@@ -31,6 +31,22 @@ def make_context(settings):
     return SimpleNamespace(application=SimpleNamespace(bot_data={"settings": settings}))
 
 
+def test_settings_loads_shell_style_dotenv_file(monkeypatch, tmp_path):
+    monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".env").write_text(
+        "TELEGRAM_BOT_TOKEN=from-dotenv\nOPENAI_API_KEY=dotenv-key\nDB_PATH=dotenv.db\n",
+        encoding="utf-8",
+    )
+
+    settings = Settings.from_env()
+
+    assert settings.telegram_bot_token == "from-dotenv"
+    assert settings.openai_api_key == "dotenv-key"
+    assert settings.db_path.name == "dotenv.db"
+
+
 def test_settings_load_required_environment(monkeypatch, tmp_path):
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "telegram-token")
     monkeypatch.setenv("OPENAI_API_KEY", "openai-key")

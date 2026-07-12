@@ -1,0 +1,12 @@
+{
+  "name": "xpensego-waitlist",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "convex dev",
+    "deploy": "convex deploy"
+  },
+  "dependencies": {
+    "convex": "^1.17.0"
+  }
+}

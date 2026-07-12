@@ -1,0 +1,1 @@
+"""Xpensego Telegram expense agent."""

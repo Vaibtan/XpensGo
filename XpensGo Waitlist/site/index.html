@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Xpensego — the expense tracker that lives in your chats</title>
+<meta name="description" content="Paste your bank SMS or just say what you spent. Xpensego categorizes it right, answers any money question in plain language, and warns you before a budget blows.">
+<meta property="og:title" content="Xpensego — the expense tracker that lives in your chats">
+<meta property="og:description" content="Your bank already tells you everything. Xpensego makes it mean something.">
+<meta property="og:type" content="website">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.1/src/regular/style.css">
+<style>
+  :root {
+    --color-bg: #161826;
+    --color-surface: #232532;
+    --color-text: #e9e9ed;
+    --color-accent: #9184d9;
+    --color-divider: color-mix(in srgb, #e9e9ed 16%, transparent);
+    --color-neutral-200: #e4e7f5;
+    --color-neutral-300: #cfd3e5;
+    --color-neutral-400: #b2b6ca;
+    --color-neutral-700: #595d6c;
+    --color-accent-300: #d2cefd;
+    --color-accent-700: #5d5294;
+    --color-accent-900: #2b2741;
+    --color-section: #262a60;
+    --color-section-glow: #353b80;
+    --color-danger: #f09595;
+    --font: "Inter", system-ui, -apple-system, sans-serif;
+    --radius-md: 8px;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: var(--font);
+    font-size: 15px;
+    line-height: 1.55;
+    color: var(--color-text);
+    background:
+      radial-gradient(1100px 680px at 82% -140px, color-mix(in srgb, var(--color-accent-900) 75%, transparent), transparent 60%),
+      radial-gradient(1000px 720px at -10% 100%, color-mix(in srgb, black 30%, transparent), transparent 55%),
+      var(--color-bg);
+    background-attachment: fixed;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1280px; margin: 0 auto; }
+  .pad { padding-inline: clamp(20px, 5vw, 64px); }
+
+  /* nav */
+  nav { display: flex; align-items: center; gap: 24px; padding-block: 20px; }
+  nav .brand { font-weight: 500; font-size: 17px; letter-spacing: -0.01em; margin-right: auto; }
+  nav a { font-size: 13.5px; color: var(--color-neutral-300); text-decoration: none; }
+  nav a:hover { color: var(--color-text); }
+  .rule { height: 1px; background: linear-gradient(to right, transparent, var(--color-divider) 48px calc(100% - 48px), transparent); }
+
+  /* controls */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    cursor: pointer; font-family: inherit; font-weight: 500; font-size: 13px;
+    line-height: 1.2; color: var(--color-accent); background: transparent;
+    border: 1px solid var(--color-accent); padding: 10px 16px; border-radius: var(--radius-md);
+  }
+  .btn:hover { background: color-mix(in srgb, var(--color-accent) 12%, transparent); }
+  .btn:active { background: color-mix(in srgb, var(--color-accent) 22%, transparent); }
+  .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+  .btn:focus-visible, .input:focus-visible { outline: 2px solid var(--color-accent-300); outline-offset: 2px; }
+  .input {
+    width: 100%; min-height: 44px; padding: 8px 12px; font: inherit; font-size: 15px;
+    color: var(--color-text); caret-color: var(--color-accent);
+    background: var(--color-surface); border: 1px solid var(--color-divider);
+    border-radius: var(--radius-md);
+  }
+  .input::placeholder { color: #8b8fa3; }
+  .input[aria-invalid="true"] { border-color: var(--color-danger); }
+  .hp { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; }
+
+  /* signup */
+  .signup { display: flex; gap: 12px; max-width: 520px; margin-top: 32px; }
+  .signup .btn { white-space: nowrap; }
+  .note { font-size: 13px; color: var(--color-neutral-400); margin: 14px 0 0; }
+  .note[role="alert"] { color: var(--color-danger); }
+  .joined {
+    display: flex; align-items: center; gap: 10px; margin-top: 32px;
+    padding: 14px 18px; max-width: 520px;
+    border: 1px solid var(--color-accent-700); border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--color-accent-900) 40%, transparent);
+    font-size: 15px;
+  }
+  .joined i { font-size: 20px; color: var(--color-accent); }
+  [hidden] { display: none !important; }
+
+  /* hero */
+  .eyebrow { display: flex; align-items: center; gap: 12px; margin-bottom: 22px; }
+  .eyebrow span:first-child { width: 44px; height: 1px; background: var(--color-accent); flex: none; }
+  .eyebrow span:last-child { font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--color-accent); }
+  .hero { padding-block: clamp(56px, 9vw, 100px) clamp(48px, 7vw, 84px); }
+  h1 {
+    font-weight: 500; font-size: clamp(34px, 5.3vw, 68px); line-height: 1.11;
+    letter-spacing: -0.015em; margin: 0 0 0 -0.06em; max-width: 18ch;
+  }
+  h1 .muted { display: block; color: var(--color-neutral-300); }
+  .lede { font-size: 17px; line-height: 1.65; max-width: 56ch; margin: 32px 0 0; color: var(--color-neutral-200); }
+
+  /* channels */
+  .channels { display: flex; align-items: center; gap: clamp(16px, 3vw, 36px); flex-wrap: wrap; padding-bottom: 72px; }
+  .channels .label { font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--color-neutral-400); }
+  .channels .row { display: flex; gap: 28px; align-items: center; flex-wrap: wrap; }
+  .channels .row span { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+  .channels .row i { font-size: 26px; }
+  .channels .soon { color: var(--color-neutral-400); }
+
+  /* proof */
+  .proof {
+    background: radial-gradient(900px 420px at 85% -40%, color-mix(in srgb, var(--color-section-glow) 70%, transparent), transparent 64%), var(--color-section);
+    padding-block: clamp(40px, 6vw, 64px);
+  }
+  .proof .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 32px; }
+  .proof .num { font-weight: 500; font-size: clamp(34px, 4vw, 48px); line-height: 1.1; margin: 0 0 0 -0.055em; font-feature-settings: 'tnum' 1; }
+  .proof .cap { font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; color: color-mix(in srgb, var(--color-text) 64%, transparent); margin: 12px 0 0; }
+
+  /* features */
+  .features { padding-block: clamp(56px, 8vw, 84px) 48px; }
+  .feature { display: grid; grid-template-columns: 380px 1fr; gap: 24px 56px; align-items: baseline; padding-block: 36px; }
+  .feature h2 { font-weight: 500; font-size: 24px; letter-spacing: -0.01em; margin: 0; }
+  .feature p { font-size: 15.5px; line-height: 1.7; margin: 0; color: color-mix(in srgb, var(--color-text) 78%, transparent); max-width: 52ch; }
+  .hair { height: 1px; background: linear-gradient(to right, transparent, var(--color-neutral-700) 48px calc(100% - 48px), transparent); }
+
+  /* close */
+  .close { padding-block: clamp(48px, 7vw, 64px) 56px; }
+  .close h3 { font-weight: 500; font-size: 24px; margin: 0; }
+  .close p { font-size: 15.5px; line-height: 1.7; color: color-mix(in srgb, var(--color-text) 78%, transparent); margin: 14px 0 0; max-width: 56ch; }
+  footer { font-size: 13px; color: var(--color-neutral-400); margin-top: 48px; line-height: 1.7; }
+  footer a { color: var(--color-accent-300); text-decoration: none; }
+  footer a:hover { color: var(--color-accent); text-decoration: underline; }
+
+  @media (max-width: 720px) {
+    .signup { flex-direction: column; }
+    .signup .btn { padding-block: 13px; }
+    .feature { grid-template-columns: 1fr; gap: 12px; padding-block: 28px; }
+    nav .hide-sm { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap pad">
+  <nav>
+    <span class="brand">Xpensego</span>
+    <a class="hide-sm" href="#what">What it does</a>
+    <a class="hide-sm" href="#join">Why it's different</a>
+    <button class="btn" type="button" onclick="document.getElementById('email-hero').focus()">Join the waitlist</button>
+  </nav>
+</div>
+<div class="wrap"><div class="rule"></div></div>
+
+<div class="wrap pad hero">
+  <div class="eyebrow"><span></span><span>Early access — waitlist open</span></div>
+  <h1>
+    The expense tracker that lives in your chats.
+    <span class="muted">Not another app you forget to open.</span>
+  </h1>
+  <p class="lede">Xpensego is an expense agent in your messaging app. Paste your bank SMS or just tell it what you spent — it categorizes everything correctly, answers any question about your money in plain language, and warns you before a budget blows.</p>
+
+  <form class="signup" data-source="hero" novalidate>
+    <label class="hp" aria-hidden="true">Leave this empty<input type="text" name="website" tabindex="-1" autocomplete="off"></label>
+    <input class="input" id="email-hero" type="email" name="email" placeholder="you@example.com" aria-label="Email address" autocomplete="email" required>
+    <button class="btn" type="submit">Join the waitlist</button>
+  </form>
+  <div class="joined" hidden>
+    <i class="ph ph-check-circle" aria-hidden="true"></i>
+    <span>You're in line. We'll write the moment your invite is ready.</span>
+  </div>
+  <p class="note" aria-live="polite">Early sign-ups get first access at launch. No spam, ever.</p>
+</div>
+
+<div class="wrap pad channels">
+  <span class="label">Where it lives</span>
+  <div class="row">
+    <span><i class="ph ph-telegram-logo" aria-hidden="true"></i>Telegram at launch</span>
+    <span class="soon"><i class="ph ph-whatsapp-logo" aria-hidden="true"></i>WhatsApp next</span>
+  </div>
+</div>
+
+<section class="proof" id="proof" hidden>
+  <div class="wrap pad grid">
+    <div>
+      <p class="num" id="waitlist-count">—</p>
+      <p class="cap">Already on the waitlist</p>
+    </div>
+    <div>
+      <p class="num">14</p>
+      <p class="cap">Categories tuned for Indian spending</p>
+    </div>
+    <div>
+      <p class="num">Zero</p>
+      <p class="cap">Apps to open</p>
+    </div>
+  </div>
+</section>
+
+<div class="wrap pad features" id="what">
+  <div class="eyebrow"><span></span><span>What Xpensego does</span></div>
+
+  <div class="feature">
+    <h2>Capture without discipline</h2>
+    <p>Paste one bank SMS or fifty, drop a CSV statement, or just type "chai 30, auto 80" for cash. You never owe Xpensego a habit — feed it whatever you already have, whenever you remember.</p>
+  </div>
+  <div class="hair"></div>
+  <div class="feature">
+    <h2>Categorization that's actually right</h2>
+    <p>It knows a Blinkit grocery run from a Zomato dinner. It asks once what a UPI transfer to a person was for — and never asks about that payee again. Say "no, that's groceries" and the correction sticks forever.</p>
+  </div>
+  <div class="hair"></div>
+  <div class="feature">
+    <h2>Answers and warnings, not dashboards</h2>
+    <p>Ask anything about your money and get the number first, in one message. Type "food budget 5000" and it's set — Xpensego messages you at 80% before the budget blows. There is no app to open.</p>
+  </div>
+</div>
+
+<div class="wrap"><div class="rule"></div></div>
+
+<div class="wrap pad close" id="join">
+  <h3>Stop guessing what you spent on food.</h3>
+  <p>The waitlist is first-come, first-served — early sign-ups get the first invites at launch.</p>
+
+  <form class="signup" data-source="footer" novalidate>
+    <label class="hp" aria-hidden="true">Leave this empty<input type="text" name="website" tabindex="-1" autocomplete="off"></label>
+    <input class="input" type="email" name="email" placeholder="you@example.com" aria-label="Email address" autocomplete="email" required>
+    <button class="btn" type="submit">Join the waitlist</button>
+  </form>
+  <div class="joined" hidden>
+    <i class="ph ph-check-circle" aria-hidden="true"></i>
+    <span>You're on the list — see you at launch.</span>
+  </div>
+  <p class="note" aria-live="polite">No spam, ever.</p>
+
+  <footer>
+    Xpensego — Your bank already tells you everything. Xpensego makes it mean something.<br>
+    <a href="/privacy.html">Privacy</a> — we never read your SMS inbox, and we'll never ask for your bank login.
+  </footer>
+</div>
+
+<script>
+  // ── The one line you must set after `npx convex deploy` ──────────────────
+  // Copy your deployment's HTTP Actions URL from the Convex dashboard.
+  // It ends in .convex.site (NOT .convex.cloud).
+  const CONVEX_URL = "https://cool-dodo-63.convex.site";
+  const VARIANT = "1a";
+
+  const params = new URLSearchParams(location.search);
+  const attribution = {
+    variant: VARIANT,
+    utmSource: params.get("utm_source") || undefined,
+    utmMedium: params.get("utm_medium") || undefined,
+    utmCampaign: params.get("utm_campaign") || undefined,
+    referrer: document.referrer || undefined,
+  };
+
+  document.querySelectorAll("form.signup").forEach((form) => {
+    const input = form.querySelector('input[name="email"]');
+    const button = form.querySelector("button");
+    const joined = form.nextElementSibling;
+    const note = joined.nextElementSibling;
+    const defaultNote = note.textContent;
+
+    const fail = (msg) => {
+      input.setAttribute("aria-invalid", "true");
+      note.setAttribute("role", "alert");
+      note.textContent = msg;
+    };
+    const reset = () => {
+      input.removeAttribute("aria-invalid");
+      note.removeAttribute("role");
+      note.textContent = defaultNote;
+    };
+
+    input.addEventListener("input", () => {
+      if (input.hasAttribute("aria-invalid")) reset();
+    });
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const email = input.value.trim();
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/.test(email)) {
+        return fail("That doesn't look like an email address — check it and try again.");
+      }
+
+      button.disabled = true;
+      button.textContent = "Joining…";
+
+      try {
+        const res = await fetch(CONVEX_URL + "/waitlist", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email,
+            source: form.dataset.source,
+            website: form.querySelector('input[name="website"]').value,
+            ...attribution,
+          }),
+        });
+        const data = await res.json();
+
+        if (data.status === "joined" || data.status === "already_joined") {
+          form.hidden = true;
+          joined.hidden = false;
+          if (data.status === "already_joined") {
+            joined.querySelector("span").textContent = "You're already on the list — sit tight.";
+          }
+          note.textContent = "No spam, ever.";
+          loadCount();
+        } else {
+          fail(data.message || "Something went wrong. Try again in a moment.");
+        }
+      } catch {
+        fail("Couldn't reach the server. Check your connection and try again.");
+      } finally {
+        button.disabled = false;
+        button.textContent = "Join the waitlist";
+      }
+    });
+  });
+
+  // The counter only appears once the number is real social proof.
+  async function loadCount() {
+    try {
+      const res = await fetch(CONVEX_URL + "/count");
+      const { count, display } = await res.json();
+      if (!display) return;
+      document.getElementById("waitlist-count").textContent =
+        count.toLocaleString("en-IN") + "+";
+      document.getElementById("proof").hidden = false;
+    } catch {}
+  }
+  loadCount();
+</script>
+
+<!-- Cloudflare Web Analytics — cookieless, no personal data, no consent banner needed.
+     Get your token: Cloudflare dashboard → Analytics & Logs → Web Analytics → Add a site.
+     Paste it below, then add the same tag to privacy.html. -->
+<script defer src="https://static.cloudflareinsights.com/beacon.min.js"
+        data-cf-beacon='{"token": "YOUR_CF_ANALYTICS_TOKEN"}'></script>
+</body>
+</html>

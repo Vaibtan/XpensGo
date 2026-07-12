@@ -3,6 +3,7 @@
 .env
 .venv/
 node_modules/
+.wrangler/
 __pycache__/
 *.py[cod]
 *.db

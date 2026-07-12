@@ -17,7 +17,7 @@ npx wrangler login
 npx wrangler d1 create xpensego-db
 ```
 
-Copy the returned database ID into `wrangler.toml` in the `database_id` field. Then apply the schema:
+Copy the returned database ID into `wrangler.jsonc` in the `database_id` field. Run all Wrangler commands from `cloudflare-worker`; the canonical Worker configuration is `wrangler.jsonc` in that directory. Then apply the schema:
 
 ```bash
 npx wrangler d1 migrations apply xpensego-db --remote

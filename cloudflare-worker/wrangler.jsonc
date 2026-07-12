@@ -1,0 +1,17 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "xpensego-worker",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-01-01",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "xpensego-db",
+      "database_id": "2bb11047-80b7-4355-801f-e74ffee80df8",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "triggers": {
+    "crons": ["30 14 * * *"]
+  }
+}

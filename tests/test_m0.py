@@ -59,6 +59,18 @@ def test_migration_creates_schema_contract_and_users_are_isolated(tmp_path):
     asyncio.run(exercise())
 
 
+def test_start_sends_fixed_welcome_and_dry_run_sample(tmp_path):
+    async def exercise():
+        settings = Settings("telegram", "openai", tmp_path / "xpensego.db")
+        await migrate(settings.db_path)
+        message = FakeMessage("/start")
+        await start(make_update("fresh-user", message), make_context(settings))
+        assert len(message.replies) == 2
+        assert message.replies[0].startswith("Hi, I'm Xpensego.")
+        assert "000000424242" in message.replies[1]
+    asyncio.run(exercise())
+
+
 def test_paused_bot_returns_maintenance_response_for_start_ping_and_text(tmp_path):
     async def exercise():
         settings = Settings("telegram", "openai", tmp_path / "xpensego.db", bot_paused=True)

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import csv
+import io
 import re
 from datetime import datetime
 from difflib import SequenceMatcher
@@ -21,6 +23,15 @@ MERCHANT_CATEGORIES = {
     "netflix": "Subscriptions", "hotstar": "Subscriptions", "gym": "Subscriptions", "myntra": "Shopping",
     "amazon": "Shopping", "apollo pharmacy": "Health", "makemytrip": "Travel", "bookmyshow": "Entertainment",
     "electricity": "Rent & Utilities", "bses": "Rent & Utilities", "recharge": "Rent & Utilities",
+}
+
+MAX_CSV_BYTES = 1024 * 1024
+MAX_CSV_ROWS = 500
+_CSV_HEADERS = {
+    "date": {"date", "transactiondate", "txndate", "valuedate", "posteddate"},
+    "amount": {"amount", "transactionamount", "txnamount", "amountinr", "withdrawalamount"},
+    "description": {"description", "narration", "particulars", "details", "transactiondetails", "merchant", "payee"},
+    "type": {"type", "transactiontype", "txntype", "debitcredit", "debitcreditindicator", "drcr"},
 }
 
 
@@ -72,6 +83,64 @@ def _category(description: str) -> str:
         if marker in lower:
             return category
     return "Other"
+
+
+def _csv_clarification(reason: str, **details: Any) -> dict[str, Any]:
+    messages = {
+        "file_too_large": "This CSV is larger than the 1 MB import limit.",
+        "too_many_rows": "This CSV has more than the 500-row import limit.",
+        "invalid_csv": "I couldn't read this as a CSV file. Please upload a valid CSV statement.",
+        "missing_columns": "I couldn't identify the date, amount, and description columns in this CSV.",
+    }
+    return {
+        "status": "needs_clarification",
+        "needs_clarification": {"reason": reason, **details, "message": messages[reason]},
+    }
+
+
+def _normalise_header(header: str | None) -> str:
+    return re.sub(r"[^a-z0-9]", "", (header or "").lower())
+
+
+def _csv_columns(headers: list[str]) -> dict[str, int] | None:
+    normalised = [_normalise_header(header) for header in headers]
+    columns: dict[str, int] = {}
+    for field in ("date", "amount", "description", "type"):
+        for index, header in enumerate(normalised):
+            if header in _CSV_HEADERS[field]:
+                columns[field] = index
+                break
+    return columns if {"date", "amount", "description"} <= columns.keys() else None
+
+
+def _csv_amount(value: str) -> float | None:
+    cleaned = value.strip().replace(",", "").replace("₹", "").replace("INR", "").replace("Rs.", "").replace("Rs", "")
+    negative = cleaned.startswith("-") or (cleaned.startswith("(") and cleaned.endswith(")"))
+    try:
+        amount = abs(float(cleaned.strip("()")))
+    except ValueError:
+        return None
+    return -amount if negative else amount
+
+
+def _csv_date(value: str) -> str:
+    candidate = value.strip()
+    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%d/%m/%y", "%d-%m-%y", "%d %b %Y", "%d-%b-%Y"):
+        try:
+            return datetime.strptime(candidate, fmt).date().isoformat()
+        except ValueError:
+            pass
+    return _date(candidate)
+
+
+def _csv_type(value: str | None, amount: float) -> str:
+    if value:
+        normalised = _normalise_header(value)
+        if normalised in {"credit", "cr", "c", "deposit", "income"}:
+            return "credit"
+        if normalised in {"debit", "dr", "d", "withdrawal", "expense"}:
+            return "debit"
+    return "credit" if amount < 0 else "debit"
 
 
 async def _is_duplicate(db: aiosqlite.Connection, ledger_id: str, entry: dict[str, Any]) -> bool:
@@ -138,7 +207,88 @@ async def parse_transactions(db: aiosqlite.Connection, user_id: str, raw_text: s
         inserted.append({"id": cursor.lastrowid, **entry})
         if category == "Other" and txn_type == "debit" and re.search(r"\b(?:trf to|to)\s+[A-Z][A-Z ]+", chunk):
             unknown_payees.append(description)
+    if inserted and not dry_run:
+        await db.execute(
+            "UPDATE users SET onboarded_at = COALESCE(onboarded_at, datetime('now')) WHERE user_id = ?",
+            (user_id,),
+        )
     return {"inserted": inserted, "pending": pending, "unknown_payees": unknown_payees}
+
+
+async def parse_csv_statement(db: aiosqlite.Connection, user_id: str, csv_bytes: bytes) -> dict[str, Any]:
+    """Parse a bank-statement CSV into entries using the SMS storage semantics."""
+    if len(csv_bytes) > MAX_CSV_BYTES:
+        return _csv_clarification("file_too_large")
+    try:
+        text = csv_bytes.decode("utf-8-sig")
+        source = io.StringIO(text, newline="")
+        reader = csv.reader(source, strict=True)
+        headers = next(reader)
+        columns = _csv_columns(headers)
+        if columns is None:
+            normalised_headers = {_normalise_header(header) for header in headers}
+            missing = [
+                field for field in ("date", "amount", "description")
+                if not normalised_headers.intersection(_CSV_HEADERS[field])
+            ]
+            return _csv_clarification("missing_columns", missing_columns=missing)
+
+        physical_lines = text.splitlines(keepends=True)
+        start_line = reader.line_num
+        parsed: list[tuple[dict[str, Any], str]] = []
+        row_count = 0
+        for row in reader:
+            row_count += 1
+            if row_count > MAX_CSV_ROWS:
+                return _csv_clarification("too_many_rows")
+            raw_row = "".join(physical_lines[start_line:reader.line_num]).rstrip("\r\n")
+            start_line = reader.line_num
+            if not row or max(columns.values()) >= len(row):
+                continue
+            amount = _csv_amount(row[columns["amount"]])
+            if amount is None or amount == 0:
+                continue
+            description = row[columns["description"]].strip() or "Transaction"
+            txn_type = _csv_type(row[columns["type"]] if "type" in columns else None, amount)
+            parsed.append((
+                {
+                    "type": txn_type,
+                    "amount": abs(amount),
+                    "category": _category(description),
+                    "description": description,
+                    "txn_date": _csv_date(row[columns["date"]]),
+                },
+                raw_row,
+            ))
+    except (UnicodeDecodeError, csv.Error, StopIteration):
+        return _csv_clarification("invalid_csv")
+
+    ledger_id = ledger_id_for(user_id)
+    await db.execute("DELETE FROM pending_entries WHERE created_at < datetime('now', '-24 hours')")
+    await db.execute("DELETE FROM pending_entries WHERE user_id = ?", (user_id,))
+    inserted: list[dict[str, Any]] = []
+    pending: list[dict[str, Any]] = []
+    for entry, raw_row in parsed:
+        if await _is_duplicate(db, ledger_id, entry):
+            cursor = await db.execute(
+                """INSERT INTO pending_entries (ledger_id, user_id, type, amount, category, description, txn_date, source, raw_input)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, 'statement', ?)""",
+                (ledger_id, user_id, entry["type"], entry["amount"], entry["category"], entry["description"], entry["txn_date"], raw_row),
+            )
+            pending.append({"pending_id": cursor.lastrowid, **entry})
+            continue
+        cursor = await db.execute(
+            """INSERT INTO entries (ledger_id,user_id,paid_by,type,amount,category,description,txn_date,source,raw_input)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'statement', ?)""",
+            (ledger_id, user_id, user_id, entry["type"], entry["amount"], entry["category"], entry["description"], entry["txn_date"], raw_row),
+        )
+        inserted.append({"id": cursor.lastrowid, **entry})
+    if inserted:
+        await db.execute(
+            "UPDATE users SET onboarded_at = COALESCE(onboarded_at, datetime('now')) WHERE user_id = ?",
+            (user_id,),
+        )
+    return {"inserted": inserted, "pending": pending, "unknown_payees": []}
 
 
 async def resolve_pending(db: aiosqlite.Connection, user_id: str, pending_ids: list[int], action: str) -> dict[str, int]:

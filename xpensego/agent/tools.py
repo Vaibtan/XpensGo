@@ -13,7 +13,8 @@ from xpensego.handlers.entries import (
     purge_my_data,
     recategorize_entry,
 )
-from xpensego.handlers.parsing import parse_transactions
+from xpensego.handlers.budgets import manage_budget
+from xpensego.handlers.parsing import parse_transactions, resolve_pending
 from xpensego.handlers.queries import query_ledger
 
 TOOLS = [
@@ -74,6 +75,21 @@ TOOLS = [
     },
     {
         "type": "function",
+        "name": "resolve_pending",
+        "description": "Resolve duplicate parsed entries held for the caller after the caller says to log or skip them.",
+        "strict": True,
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "pending_ids": {"type": "array", "items": {"type": "integer"}},
+                "action": {"type": "string", "enum": ["log", "discard"]}
+            },
+            "required": ["pending_ids", "action"],
+            "additionalProperties": False
+        }
+    },
+    {
+        "type": "function",
         "name": "query_ledger",
         "description": "Answer a money question using structured slots. The server scopes the query to the caller and writes no model SQL.",
         "strict": True,
@@ -90,6 +106,22 @@ TOOLS = [
                 "group_by": {"type": "string", "enum": ["category", "txn_date", "none"]}
             },
             "required": ["metric", "type", "category", "description_contains", "date_from", "date_to", "compare_date_from", "compare_date_to", "group_by"],
+            "additionalProperties": False
+        }
+    },
+    {
+        "type": "function",
+        "name": "manage_budget",
+        "description": "Set a monthly category budget or list the caller's budgets with month-to-date debit spend.",
+        "strict": True,
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "enum": ["set", "list"]},
+                "category": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+                "monthly_limit": {"anyOf": [{"type": "number", "exclusiveMinimum": 0}, {"type": "null"}]}
+            },
+            "required": ["action", "category", "monthly_limit"],
             "additionalProperties": False
         }
     },
@@ -126,8 +158,12 @@ async def dispatch_tool(
             result = await log_entries(db, user_id, payload)
         elif name == "parse_transactions":
             result = await parse_transactions(db, user_id, payload["raw_text"])
+        elif name == "resolve_pending":
+            result = await resolve_pending(db, user_id, payload["pending_ids"], payload["action"])
         elif name == "query_ledger":
             result = await query_ledger(db, user_id, payload)
+        elif name == "manage_budget":
+            result = await manage_budget(db, user_id, payload)
         elif name == "delete_last_entry":
             result = await delete_last_entry(db, user_id)
         elif name == "recategorize_entry":

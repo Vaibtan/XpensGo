@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy — Xpensego</title>
+<meta name="description" content="What Xpensego collects when you join the waitlist, what it doesn't, and how to get your data deleted.">
+<meta name="robots" content="index, follow">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --color-bg: #161826;
+    --color-text: #e9e9ed;
+    --color-accent: #9184d9;
+    --color-accent-300: #d2cefd;
+    --color-accent-900: #2b2741;
+    --color-divider: color-mix(in srgb, #e9e9ed 16%, transparent);
+    --color-neutral-300: #cfd3e5;
+    --color-neutral-400: #b2b6ca;
+    --font: "Inter", system-ui, -apple-system, sans-serif;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: var(--font);
+    font-size: 16px;
+    line-height: 1.7;
+    color: var(--color-text);
+    background:
+      radial-gradient(1100px 680px at 82% -140px, color-mix(in srgb, var(--color-accent-900) 75%, transparent), transparent 60%),
+      var(--color-bg);
+    background-attachment: fixed;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 0 clamp(20px, 5vw, 40px); }
+  nav { display: flex; align-items: center; padding-block: 20px; }
+  nav .brand { font-weight: 500; font-size: 17px; letter-spacing: -0.01em; margin-right: auto; text-decoration: none; color: var(--color-text); }
+  nav a.back { font-size: 13.5px; color: var(--color-neutral-300); text-decoration: none; }
+  nav a.back:hover { color: var(--color-text); }
+  .rule { height: 1px; background: var(--color-divider); }
+
+  main { padding-block: clamp(48px, 8vw, 72px) 64px; }
+  .eyebrow { font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--color-accent); margin: 0 0 18px; }
+  h1 { font-weight: 500; font-size: clamp(30px, 5vw, 42px); line-height: 1.15; letter-spacing: -0.015em; margin: 0 0 12px; }
+  .updated { font-size: 14px; color: var(--color-neutral-400); margin: 0 0 40px; }
+  h2 { font-weight: 500; font-size: 20px; letter-spacing: -0.01em; margin: 40px 0 12px; }
+  p, li { color: color-mix(in srgb, var(--color-text) 82%, transparent); }
+  p { margin: 0 0 14px; }
+  ul { margin: 0 0 14px; padding-left: 20px; }
+  li { margin-bottom: 8px; }
+  strong { font-weight: 500; color: var(--color-text); }
+  a { color: var(--color-accent-300); }
+  a:hover { color: var(--color-accent); }
+  code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.9em; padding: 2px 6px; border-radius: 4px;
+    background: color-mix(in srgb, var(--color-accent-900) 60%, transparent);
+    color: var(--color-accent-300);
+  }
+  .callout {
+    border: 1px solid color-mix(in srgb, var(--color-accent) 40%, transparent);
+    border-radius: 8px; padding: 18px 20px; margin: 28px 0;
+    background: color-mix(in srgb, var(--color-accent-900) 40%, transparent);
+  }
+  .callout p:last-child { margin-bottom: 0; }
+  footer { font-size: 13px; color: var(--color-neutral-400); padding-bottom: 56px; }
+  footer a { color: var(--color-neutral-400); }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <nav>
+    <a class="brand" href="/">Xpensego</a>
+    <a class="back" href="/">← Back</a>
+  </nav>
+  <div class="rule"></div>
+
+  <main>
+    <p class="eyebrow">Privacy</p>
+    <h1>What we collect, and what we don't.</h1>
+    <p class="updated">Last updated: July 2026 · This page covers the waitlist only. When the product launches, it gets its own note.</p>
+
+    <p>Xpensego is a product about your money, so we'll be plain about this rather than hiding it in legalese. Right now, Xpensego is a waitlist. Nothing more is running.</p>
+
+    <h2>What we collect when you join</h2>
+    <ul>
+      <li><strong>Your email address.</strong> That's the only thing you type, and the only thing we ask for.</li>
+      <li><strong>How you found us.</strong> Which link brought you here (the <code>utm_source</code> in the URL, and the site you came from), and which part of the page you signed up on. This tells us whether a Reddit post worked better than a tweet. It is not tied to anything about you beyond your email.</li>
+      <li><strong>When you joined.</strong> Invites go out in order, so we need to know the order.</li>
+    </ul>
+
+    <h2>What we don't collect</h2>
+    <ul>
+      <li><strong>No transactions.</strong> Xpensego hasn't launched. There is no ledger, no spending data, nothing about your money on this site.</li>
+      <li><strong>No bank access, ever.</strong> Xpensego will never ask for your bank login, your net banking credentials, your UPI PIN, or read-access to your accounts. When the product ships, it works because <em>you paste an SMS</em> — nothing is fetched on your behalf.</li>
+      <li><strong>No reading your SMS inbox.</strong> No Android SMS permission, now or in v1.</li>
+      <li><strong>No IP addresses stored.</strong> No advertising cookies. No tracking pixels in our emails — we don't record whether you opened them.</li>
+      <li><strong>No selling or sharing your email.</strong> Not with advertisers, not with data brokers, not with anyone. This isn't a promise we'd like to make later; it's a line we won't cross.</li>
+    </ul>
+
+    <h2>What we'll email you</h2>
+    <p>Two emails. One now, confirming you're on the list. One when your invite is ready. That's the whole plan. If we ever want to send you something else, we'll ask first.</p>
+
+    <h2>Who else touches your email address</h2>
+    <p>Two service providers, both standard, both used only to make the above work:</p>
+    <ul>
+      <li><strong>Convex</strong> — stores the waitlist.</li>
+      <li><strong>Resend</strong> — delivers the two emails.</li>
+    </ul>
+    <p>The site itself is hosted on Cloudflare. We use Cloudflare Web Analytics, which counts page visits without cookies and without building a profile of you.</p>
+
+    <h2>Getting off the list</h2>
+    <div class="callout">
+      <p><strong>Reply "remove me" to any email from us</strong>, or write to <a href="mailto:privacy@xpensego.com">privacy@xpensego.com</a>. We delete your row — the actual row, not a "deleted" flag — and you'll hear nothing further. No retention period, no exit survey, no "are you sure?" sequence.</p>
+    </div>
+    <p>You can also ask us what we hold about you, and we'll send you the row. It will be short.</p>
+
+    <h2>How long we keep it</h2>
+    <p>Until you ask us to delete it, or until the waitlist is fully invited and closed — whichever comes first. If Xpensego never ships, we delete the list and tell you we did.</p>
+
+    <h2>Questions</h2>
+    <p>Write to <a href="mailto:privacy@xpensego.com">privacy@xpensego.com</a>. A person reads it.</p>
+  </main>
+
+  <div class="rule"></div>
+  <footer>
+    <p style="margin-top:24px;">Xpensego — Your bank already tells you everything. Xpensego makes it mean something.<br>
+    <a href="/">Back to the waitlist</a></p>
+  </footer>
+</div>
+
+<script defer src="https://static.cloudflareinsights.com/beacon.min.js"
+        data-cf-beacon='{"token": "YOUR_CF_ANALYTICS_TOKEN"}'></script>
+</body>
+</html>

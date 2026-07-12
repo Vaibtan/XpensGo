@@ -1,8 +1,9 @@
-# Xpensego — Build Spec v2.0 (for the coding agent)
+# Xpensego — Build Spec v2.1 (for the coding agent)
 
-**Supersedes:** Build Spec v1.1 (deleted — do not reference).
 **Companion:** PRD v1.0 (feature tiers + acceptance criteria). Where this spec and the PRD conflict, the PRD's product intent wins; flag the conflict instead of guessing.
 **Scope of this build:** PRD items tagged [BUILD] only. Do not implement [v1.5] or [v2] features, but the schema below already accommodates them — implement the schema exactly as written.
+
+**Decision log (locked 12 Jul 2026):** OpenAI Responses API, `gpt-5.4-nano` everywhere (one model) · laptop long-polling for build day, hosting deferred to week 1 · `query_ledger` is a structured slot-filling tool, the model never writes SQL · parse-time duplicates held in `pending_entries`, confirmed via `resolve_pending` (no re-parse, no model transcription) · unknown payees insert immediately as Other, recategorized on answer · onboarding sample SMS is a dry run with a reserved UPI ref, never inserted · SMS pastes split deterministically, extracted per-SMS in parallel · dependencies via uv.
 
 ---
 
@@ -18,7 +19,7 @@ These override any implementation convenience. Violating any of them is a failed
 2. **Debits-only math:** spend totals, budgets, and alerts compute over `type='debit'` only. Credits are recorded and separately queryable, never netted in unless the user explicitly asks for "net".
 3. **Date echo:** every logging confirmation displays the resolved date (`✓ ₹500 · Food & Dining — 03/07/26`). No silent date assumptions.
 4. **Soft delete everywhere** (`deleted_at` timestamp; every read filters `deleted_at IS NULL`) **except** the user command "delete everything about me", which hard-deletes all rows for that user after one confirmation.
-5. **Cost logging:** every Anthropic API call is wrapped; log user_id, operation, model, input/output tokens, computed cost to `cost_log`. No exceptions, including onboarding.
+5. **Cost logging:** every OpenAI API call is wrapped; log user_id, operation, model, input/output tokens, computed cost to `cost_log`. No exceptions, including onboarding.
 6. **Tone contract:** one-line confirmations; answers lead with the number; at most ONE clarifying question per agent message; off-topic input → one brief sentence + steer back to expenses; no financial advice lectures; no emojis except ✓ on confirmations and ⚠️ on alerts.
 7. **Raw input preservation:** every SMS/statement-parsed row stores the original text in `raw_input`.
 8. **Abuse controls (the bot is public from day one):** per-user cap of 150 agent turns/day and 30/hour (over cap → polite static message, no LLM call); inbound text truncated at 4,000 characters; CSV uploads capped at 500 rows / 1 MB; a `BOT_PAUSED` env flag that makes the bot reply with a static maintenance line (global kill switch if the API bill runs away).
@@ -27,10 +28,11 @@ These override any implementation convenience. Violating any of them is a failed
 
 - **Python 3.11+**, FastAPI, uvicorn.
 - **python-telegram-bot** v21+ (async), **long polling** for the buildathon (no public URL/webhook dependency; switchable later).
-- **anthropic** SDK. Model: `claude-sonnet-4-6` for the agent loop and parsing. One model everywhere; do not mix.
+- **openai** SDK via the **Responses API** (tool calling with `strict: true` function schemas). Model: `gpt-5.4-nano` for the agent loop and parsing. One model everywhere; do not mix.
+- Dependencies managed with **uv** (`pyproject.toml` + committed `uv.lock`); run everything via `uv run` — the dev laptop is the demo machine, so reproducibility is the point.
 - **SQLite** via `aiosqlite`, single file `xpensego.db`. All DDL kept Postgres-compatible (no SQLite-only types in schema design).
 - **APScheduler** (AsyncIOScheduler) for the daily alert job.
-- Config via environment: `TELEGRAM_BOT_TOKEN`, `ANTHROPIC_API_KEY`, `DB_PATH` (default `./xpensego.db`), `ALERT_HOUR_IST` (default 20).
+- Config via environment: `TELEGRAM_BOT_TOKEN`, `OPENAI_API_KEY`, `DB_PATH` (default `./xpensego.db`), `ALERT_HOUR_IST` (default 20).
 
 ## 3. Project structure
 
@@ -40,7 +42,7 @@ xpensego/
 ├── config.py             # env loading
 ├── db.py                 # connection, migrations (schema below), query helpers
 ├── agent/
-│   ├── loop.py           # per-message agent loop (Claude tool-use)
+│   ├── loop.py           # per-message agent loop (OpenAI Responses tool loop)
 │   ├── system_prompt.py  # builds the system prompt (template in §7)
 │   └── tools.py          # tool JSON schemas + dispatch to handlers
 ├── handlers/
@@ -53,7 +55,7 @@ xpensego/
 │   ├── bot.py            # update handling, /start onboarding, file download (CSV)
 │   └── send.py           # outbound messages (also used by alerts)
 ├── alerts.py             # daily budget check + /trigger-alerts logic
-├── costs.py              # Anthropic call wrapper with cost_log writes
+├── costs.py              # OpenAI call wrapper with cost_log writes
 ├── seed_demo.py          # seeds demo user data for rehearsal
 └── tests/
     ├── test_qa_set.py    # Appendix A cases
@@ -89,6 +91,21 @@ CREATE TABLE entries (
 );
 CREATE INDEX idx_entries_ledger_date ON entries(ledger_id, txn_date);
 CREATE INDEX idx_entries_dedup ON entries(ledger_id, amount, txn_date);
+
+CREATE TABLE pending_entries (             -- parse-time duplicates awaiting user confirmation
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  ledger_id   TEXT NOT NULL,
+  user_id     TEXT NOT NULL,
+  type        TEXT NOT NULL CHECK (type IN ('debit','credit')),
+  amount      REAL NOT NULL CHECK (amount > 0),
+  category    TEXT NOT NULL,
+  description TEXT,
+  txn_date    TEXT NOT NULL,
+  source      TEXT NOT NULL,
+  raw_input   TEXT,
+  reason      TEXT NOT NULL DEFAULT 'duplicate',
+  created_at  TEXT DEFAULT (datetime('now'))
+);
 
 CREATE TABLE budgets (
   ledger_id     TEXT NOT NULL,
@@ -140,7 +157,7 @@ CREATE TABLE cost_log (
 );
 ```
 
-Schema rules for all code: every entries read includes `deleted_at IS NULL`; every write sets `ledger_id = 'user:' || user_id` and `paid_by = user_id` (group values are v2); "delete everything about me" hard-deletes the user's rows from every table above.
+Schema rules for all code: every entries read includes `deleted_at IS NULL`; every write sets `ledger_id = 'user:' || user_id` and `paid_by = user_id` (group values are v2); "delete everything about me" hard-deletes the user's rows from every table above. `pending_entries` rows are ephemeral: auto-discard rows older than 24h, and discard the user's leftover pending rows at the start of their next paste.
 
 ## 5. Message flow (per Telegram update)
 
@@ -148,11 +165,11 @@ Schema rules for all code: every entries read includes `deleted_at IS NULL`; eve
 2. `/start` → onboarding flow (§8), bypasses the agent loop for message 1–2.
 3. Document attachment (CSV) → download, run `parse_transactions` with `source='statement'`.
 4. Text → load last 10 `conversation_context` rows for this user → build system prompt (§7, includes today's date in IST and the user's known payees count) → run the agent loop (§6) → send reply → append user message and assistant reply to `conversation_context` → prune context rows older than 7 days.
-5. Any Anthropic call goes through `costs.py` wrapper.
+5. Any OpenAI call goes through `costs.py` wrapper.
 
 ## 6. Agent loop & tools
 
-Standard Anthropic tool-use loop: send messages + tools; while `stop_reason == "tool_use"`, execute the tool server-side and return `tool_result`; cap at 8 tool iterations per turn; on cap, reply asking the user to simplify.
+Standard OpenAI Responses API tool loop: call `client.responses.create()` with the conversation input and tool definitions (`strict: true` on every schema); while the response output contains `function_call` items, execute each server-side and send back matching `function_call_output` items (chaining with `previous_response_id`); cap at 8 tool iterations per turn; on cap, reply asking the user to simplify.
 
 ### 6.1 Tool: `log_entries`
 ```json
@@ -194,36 +211,52 @@ Handler: validate category against the 14 defaults (reject others with an error 
 ```json
 {
   "name": "parse_transactions",
-  "description": "Parse pasted bank/UPI SMS text (one or many messages) into structured entries. Call with the full raw pasted text. The server returns parsed candidates including duplicates detected; you then present the summary and ask about duplicates/unknown payees (one question max).",
+  "description": "Parse pasted bank/UPI SMS text (one or many messages) into structured entries. Call with the full raw pasted text. The server inserts what it can, holds duplicates as pending, and returns everything with ids; you then present the summary and ask at most one question (duplicates or first unknown payee).",
   "input_schema": {
     "type": "object",
     "properties": {
-      "raw_text": {"type": "string"},
-      "confirmed": {"type": "boolean", "description": "true when re-calling after the user resolved duplicate/payee questions"}
+      "raw_text": {"type": "string"}
     },
     "required": ["raw_text"]
   }
 }
 ```
-Handler pipeline: split raw text into individual SMS candidates → per SMS, a dedicated extraction call to the model (structured JSON out: merchant, amount, date, type, upi_vpa) → categorize (merchant map from §7 taxonomy + payee_memory lookup) → dedup check (same ledger + amount + txn_date + fuzzy description ≥ 0.8 similarity) → insert non-duplicates with `source='sms'`, `raw_input` = the original SMS → return {inserted: [...], duplicates_held: [...], unknown_payees: [...]}. The agent then reports: count, total, top 3 categories, and at most one question (duplicates or first unknown payee).
-CSV path: same handler, rows from CSV columns (auto-detect date/amount/description columns from the header; ask if undetectable), `source='statement'`.
+Handler pipeline:
+1. **Split deterministically** — blank lines plus the bank-header patterns evident in Appendix B (`HDFC Bank:`, `Dear Customer`, `Dear SBI User`, `ICICI Bank`, `Axis Bank:`, `INR … debited`, `Paid Rs.`, `You paid ₹`). The chunk count grounds the "N parsed" the user sees.
+2. **Extract per chunk, in parallel** — one extraction call per SMS chunk via `asyncio.gather` (structured JSON out: merchant, amount, date, type, upi_vpa). Fallback: if a chunk appears to contain multiple amounts (splitter missed a boundary), that chunk's call asks for an array. A failed extraction retries once, alone.
+3. **Categorize** — merchant map from §7 taxonomy + payee_memory lookup. Person-payees with no stored category insert immediately as `Other` (never held); the agent asks the one payee question and the answer fires `recategorize_entry` + `teach_payee`.
+4. **Dedup check** — same ledger + amount + txn_date + fuzzy description ≥ 0.8 similarity. Non-duplicates insert with `source='sms'`, `raw_input` = the original SMS. Duplicates go to `pending_entries` (never silently inserted, never silently dropped).
+5. **Return** `{inserted: [{id, ...}], pending: [{pending_id, ...}], unknown_payees: [...]}`. The agent reports: count, total, top 3 categories, a short numbered list of the inserted entries (so "2 is groceries" works per FR-3.5), and at most one question (duplicate confirm or first unknown payee).
 
-### 6.3 Tool: `query_ledger`
+CSV path: same handler from step 3 onward, rows from CSV columns (auto-detect date/amount/description columns from the header; ask if undetectable), `source='statement'`.
+
+### 6.3 Tool: `query_ledger` (structured — the model never writes SQL)
 ```json
 {
   "name": "query_ledger",
-  "description": "Run a read-only SQL SELECT against the user's own ledger views to answer a money question. Available views: my_entries (id, type, amount, category, subcategory, description, txn_date), my_budgets (category, monthly_limit). my_entries already excludes deleted rows and other users. Remember: spend questions filter type='debit'.",
+  "description": "Answer a money question from the user's own ledger by filling slots; the server runs the SQL. Spend questions use type='debit' (the default). For comparisons ('this week vs last week'), set the compare_* range. Every result row includes entry ids where applicable.",
   "input_schema": {
     "type": "object",
-    "properties": {"sql": {"type": "string"}},
-    "required": ["sql"]
+    "properties": {
+      "metric": {"type": "string", "enum": ["total", "list", "max", "avg_per_day", "count", "budget_status"]},
+      "type": {"type": "string", "enum": ["debit", "credit", "all"]},
+      "category": {"type": "string", "description": "one of the 14 categories; omit for all"},
+      "description_contains": {"type": "string", "description": "substring match on description/merchant, e.g. 'blinkit'"},
+      "date_from": {"type": "string", "description": "YYYY-MM-DD inclusive"},
+      "date_to": {"type": "string", "description": "YYYY-MM-DD inclusive"},
+      "compare_date_from": {"type": "string"},
+      "compare_date_to": {"type": "string"},
+      "group_by": {"type": "string", "enum": ["category", "txn_date", "none"]}
+    },
+    "required": ["metric", "date_from", "date_to"]
   }
 }
 ```
-Handler — the guard is the point:
-1. Per request, create temp views scoped to the caller: `my_entries` (WHERE ledger_id = 'user:<id>' AND deleted_at IS NULL) and `my_budgets` (WHERE ledger_id = 'user:<id>').
-2. Validate the SQL: single statement; must start with SELECT; reject if it references any identifier other than the two views and their columns; reject keywords INSERT/UPDATE/DELETE/DROP/ALTER/ATTACH/PRAGMA/CREATE (word-boundary match); LIMIT 200 enforced.
-3. Execute read-only; return rows as JSON. On rejection, return the reason so the model can rewrite.
+Handler — slot-filling replaces the SQL guard (decision log):
+1. Dispatch each metric to hand-written parameterized SQL. `ledger_id = 'user:<id>'` and `deleted_at IS NULL` are injected server-side on every query — isolation never depends on model output. `type` defaults to `debit`.
+2. Metrics: `total` (SUM, optionally grouped), `list` (rows with id, type, amount, category, description, txn_date — capped at 200, newest first), `max` (single largest entry), `avg_per_day` (SUM / days in range), `count`, `budget_status` (each budget with current-range debit total).
+3. When `compare_date_from/to` is set, run the same query over the second range and return both results so the model can phrase the comparison.
+4. Coverage of the seven FR-9 classes: totals→`total`, comparisons→`compare_*`, superlatives→`max`, listings→`list`, rates→`avg_per_day`, credits→`type:'credit'`, merchant questions→`description_contains`. A question the schema can't express → the model answers "can't answer that yet" honestly (schema extension is a v1.5 task, not a build-day heroic).
 
 ### 6.4 Tool: `manage_budget`
 ```json
@@ -265,7 +298,24 @@ Handler: set `deleted_at` on the newest live row for the ledger; return the dele
   }
 }
 ```
-Handler: hard-delete this user's rows from entries, budgets, payee_memory, custom_categories, conversation_context, alerts_sent, users. cost_log rows are anonymized (user_id set to NULL), not deleted — they contain no personal content and are needed for unit economics. Reply: "Done. Everything's deleted. If you come back, we start fresh."
+Handler: hard-delete this user's rows from entries, pending_entries, budgets, payee_memory, custom_categories, conversation_context, alerts_sent, users. cost_log rows are anonymized (user_id set to NULL), not deleted — they contain no personal content and are needed for unit economics. Reply: "Done. Everything's deleted. If you come back, we start fresh."
+
+### 6.7 Tool: `resolve_pending`
+```json
+{
+  "name": "resolve_pending",
+  "description": "Resolve parse-time duplicates held for the user's confirmation. Call only after the user has answered the duplicate question. 'log' inserts the held entries exactly as parsed; 'discard' drops them.",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "pending_ids": {"type": "array", "items": {"type": "integer"}},
+      "action": {"type": "string", "enum": ["log", "discard"]}
+    },
+    "required": ["pending_ids", "action"]
+  }
+}
+```
+Handler: `log` moves the rows from `pending_entries` into `entries` verbatim — the server copies every field, the model transcribes nothing (a transposed digit in a ledger is the unforgivable error class). `discard` deletes the pending rows. Either way, confirm in one line. Pending ids not belonging to the caller are ignored (isolation).
 
 ## 7. System prompt (template — implement in `system_prompt.py`)
 
@@ -309,9 +359,10 @@ PAYEES: for person-to-person transfers with a payee you don't have a stored cate
 for, ask once what it was for, then pass teach_payee so you never ask again. Known
 payees categorize silently.
 
-CORRECTIONS: "no, that's groceries" → re-categorize the last entry (use query_ledger to
-find it if needed, then log the correction via the entries handler) and update payee
-memory when a payee is involved.
+CORRECTIONS: "no, that's groceries" → recategorize_entry on the last entry (use
+query_ledger's list metric to find it if needed) and update payee memory when a
+payee is involved. After a paste summary, a numbered reply ("2 is groceries")
+refers to that summary's numbered list — map it to the entry id and recategorize.
 
 DELETION: "delete that / the last one" → delete_last_entry. "Delete everything about
 me" → ask ONE confirmation question; only on an explicit yes call purge_my_data.
@@ -319,15 +370,15 @@ me" → ask ONE confirmation question; only on an explicit yes call purge_my_dat
 {payee_memory_summary}   # e.g. "Known payees: rahul→Rent & Utilities, mom→Family & Gifts"
 ```
 
-Note to builder: correction of an existing row needs an UPDATE path — add a small internal handler `recategorize_entry(entry_id, category)` reachable from `log_entries`'s handler file and exposed as a seventh tool `recategorize_entry {entry_id, category}`; the model gets entry ids back from every logging/query call, so it can reference them.
+Note to builder: correction of an existing row needs an UPDATE path — add a small internal handler `recategorize_entry(entry_id, category)` reachable from `log_entries`'s handler file and exposed as an eighth tool `recategorize_entry {entry_id, category}`; the model gets entry ids back from every logging/query call, so it can reference them. (Tool roster: log_entries, parse_transactions, query_ledger, manage_budget, delete_last_entry, purge_my_data, resolve_pending, recategorize_entry.)
 
 ## 8. Onboarding (`/start`)
 
 Three fixed messages (not model-generated; hardcode):
 1. "Hi, I'm Xpensego 👋 Tell me what you spend, or paste your bank SMS — I'll keep the ledger and answer anything about your money."
-2. "Try it — paste this: `HDFC Bank: Rs.649.00 debited from a/c **1234 on {today-1} to VPA blinkit@ybl (UPI Ref 654321987654)`"
+2. "Try it — paste this: `HDFC Bank: Rs.649.00 debited from a/c **1234 on {today-1} to VPA blinkit@ybl (UPI Ref 000000424242)`"
 3. (sent after their first successful parse/log) "That's it. Log something real, or set a budget anytime — like *food budget 5000*."
-Set `users.onboarded_at` on first real (non-sample) entry; the sample SMS above must be recognized (by its UPI ref) and inserted with a `description` marker `[sample]`, then auto-soft-deleted after message 3 so it never pollutes reports.
+Set `users.onboarded_at` on first real (non-sample) entry. The sample SMS is recognized by its reserved UPI ref `000000424242` (appears nowhere in Appendix B or any real bank message) and handled as a **dry run**: the real extraction + categorization pipeline runs and the real ✓ confirmation is shown, but nothing is inserted — the sample never touches the ledger, so no code path can put it in a report, a dedup check, or the demo.
 
 ## 9. Alerts
 
@@ -340,8 +391,8 @@ Set `users.onboarded_at` on first real (non-sample) entry; the sample SMS above 
 |---|---|---|
 | M0 | Repo skeleton, config, DB migrations, bot answers "ping"→"pong" via polling | Two different Telegram accounts get independent replies |
 | M1 | Agent loop + log_entries + conversation context + cost logging + abuse caps | "chai 30, auto 80, lunch 250" → 3 rows, one ✓ confirmation with today's date; "spent 500 on groceries yesterday" echoes yesterday's date; cost_log has rows; 31st message in an hour gets the static cap reply with zero LLM calls |
-| M2 | parse_transactions (SMS paste) + payee memory + dedup | Appendix B corpus: ≥19/20 SMS parsed with correct amount+date+type; Blinkit→Groceries and Zomato→Food & Dining; re-pasting SMS #7 triggers the duplicate question; unknown payee (SMS #12) asks once, second paste of a Rahul transfer is silent |
-| M3 | query_ledger + guard | All 7 query classes in Appendix A answer correctly on seeded data; a malicious `SELECT * FROM entries` (base table) is rejected; UPDATE attempt rejected |
+| M2 | parse_transactions (SMS paste) + payee memory + dedup/pending + resolve_pending | Appendix B corpus: ≥19/20 SMS parsed with correct amount+date+type; Blinkit→Groceries and Zomato→Food & Dining; re-pasting SMS #7 lands in pending_entries and asks — "log it" → resolve_pending inserts verbatim, "skip" discards; unknown payee (SMS #9) inserts as Other and asks once, the answer recategorizes + teaches; second Rahul transfer (SMS #12) is silent |
+| M3 | query_ledger (structured) | All 7 query classes in Appendix A answer correctly on seeded data via slot-filled query_ledger calls; ledger scoping is injected server-side — user B's totals are ₹0 after user A logs; a question the schema can't express gets a graceful "can't answer that yet" |
 | M4 | manage_budget + alerts + /trigger-alerts | "food budget 5000" then seed 4,200 food debits → /trigger-alerts sends the 80% warning once; second trigger sends nothing |
 | M5 | Onboarding + delete_last_entry + recategorize + purge | Fresh account /start→sample paste→real entry sets onboarded_at; "no, that's groceries" fixes the last entry; purge flow requires the confirm question |
 | M6 | CSV upload | Sample CSV → parsed summary; bad CSV → one graceful question |

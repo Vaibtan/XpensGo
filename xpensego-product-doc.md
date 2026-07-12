@@ -3,7 +3,7 @@
 **Product name:** Xpensego (confirmed)
 **Author:** Black · **Status:** Draft for review
 **Origin:** 8-hour buildathon (Revenue track, Hermes required) treated as the seed of a real product, not a throwaway prototype.
-**Related docs:** PRD (next), Build Spec v1.1 (exists), Demo Script (in build spec §9).
+**Related docs:** PRD v1.0, Build Spec v2.1, Demo Script (PRD companion).
 
 ---
 

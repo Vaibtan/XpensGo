@@ -2,7 +2,7 @@
 
 **Author:** Black · **Builder:** Black + partner (Hermes runs on partner's system)
 **Status:** Ready for build
-**Companion docs:** Product Document v0.2 (vision, positioning, risks) · Build Spec v1.1 (architecture — supersede its scope with this PRD)
+**Companion docs:** Product Document v0.2 (vision, positioning, risks) · Build Spec v2.1 (architecture — implements this PRD's [BUILD] scope; decision log at its top)
 
 ---
 
@@ -190,7 +190,7 @@ Never cut: FR-1, FR-3, FR-5/6, FR-9, FR-16, rehearsal hour, isolation, echoed-da
 
 ## 13. Non-functional requirements
 
-- **Latency:** manual log confirm <5s; bulk SMS parse <15s for 20 SMS; queries <8s.
+- **Latency (happy path, single tool iteration):** manual log confirm <5s; bulk SMS parse <15s for 20 SMS; queries <8s.
 - **Isolation:** user_id injected server-side, never model-chosen. **[BUILD]**
 - **Auditability:** raw input stored on parsed rows; soft deletes; corrections logged. **[BUILD]**
 - **Cost instrumentation:** per-interaction LLM cost logged per user from day one — pricing (open) is blocked on this data. **[BUILD]**

@@ -35,7 +35,7 @@ def _month_bounds(now: datetime) -> tuple[str, str, int]:
 
 
 async def check_budget_alerts(
-    db: aiosqlite.Connection, *, now: datetime | None = None
+    db: aiosqlite.Connection, *, now: datetime | None = None, claim: bool = True
 ) -> list[dict[str, Any]]:
     """Claim and return newly crossed 80%/100% monthly budget alerts.
 
@@ -67,14 +67,20 @@ async def check_budget_alerts(
         for threshold in ALERT_THRESHOLDS:
             if percent_used < threshold:
                 continue
-            claim = await db.execute(
-                """INSERT INTO alerts_sent (ledger_id, category, month, threshold)
-                   VALUES (?, ?, ?, ?)
-                   ON CONFLICT(ledger_id, category, month, threshold) DO NOTHING""",
-                (ledger_id, category, month, threshold),
-            )
-            if claim.rowcount != 1:
-                continue
+            if claim:
+                claimed = await mark_alert_sent(
+                    db,
+                    {"ledger_id": ledger_id, "category": category, "month": month, "threshold": threshold},
+                )
+                if not claimed:
+                    continue
+            else:
+                existing = await db.execute(
+                    "SELECT 1 FROM alerts_sent WHERE ledger_id = ? AND category = ? AND month = ? AND threshold = ?",
+                    (ledger_id, category, month, threshold),
+                )
+                if await existing.fetchone():
+                    continue
             alerts.append(
                 {
                     "ledger_id": ledger_id,
@@ -88,6 +94,16 @@ async def check_budget_alerts(
                 }
             )
     return alerts
+
+
+async def mark_alert_sent(db: aiosqlite.Connection, alert: dict[str, Any]) -> bool:
+    cursor = await db.execute(
+        """INSERT INTO alerts_sent (ledger_id, category, month, threshold)
+           VALUES (?, ?, ?, ?)
+           ON CONFLICT(ledger_id, category, month, threshold) DO NOTHING""",
+        (alert["ledger_id"], alert["category"], alert["month"], alert["threshold"]),
+    )
+    return cursor.rowcount == 1
 
 
 def format_alert(alert: dict[str, Any]) -> str:

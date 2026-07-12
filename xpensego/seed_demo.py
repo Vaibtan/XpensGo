@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -10,7 +11,7 @@ from zoneinfo import ZoneInfo
 from xpensego.db import get_connection, migrate, upsert_user
 from xpensego.handlers.entries import ledger_id_for
 
-DEMO_USER_ID = "demo-user"
+DEMO_USER_ID = os.getenv("DEMO_TELEGRAM_USER_ID", "0")
 
 
 async def seed_demo(db_path: Path) -> None:
@@ -21,6 +22,7 @@ async def seed_demo(db_path: Path) -> None:
         await upsert_user(db, DEMO_USER_ID, "Xpensego Demo")
         await db.execute("DELETE FROM entries WHERE user_id = ?", (DEMO_USER_ID,))
         await db.execute("DELETE FROM budgets WHERE ledger_id = ?", (ledger_id,))
+        await db.execute("DELETE FROM alerts_sent WHERE ledger_id = ?", (ledger_id,))
         rows = [
             ("debit", 2400, "Food & Dining", "Swiggy dinner", today.replace(day=1).isoformat()),
             ("debit", 649, "Groceries", "Blinkit", today.replace(day=min(2, today.day)).isoformat()),

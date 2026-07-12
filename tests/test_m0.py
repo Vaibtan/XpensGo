@@ -66,7 +66,7 @@ def test_start_sends_fixed_welcome_and_dry_run_sample(tmp_path):
         message = FakeMessage("/start")
         await start(make_update("fresh-user", message), make_context(settings))
         assert len(message.replies) == 2
-        assert message.replies[0].startswith("Hi, I'm Xpensego.")
+        assert message.replies[0].startswith("Hi, I'm Xpensego 👋")
         assert "000000424242" in message.replies[1]
     asyncio.run(exercise())
 

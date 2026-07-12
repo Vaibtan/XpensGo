@@ -50,7 +50,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if update.effective_message:
         sample_date = (datetime.now(ZoneInfo("Asia/Kolkata")).date() - timedelta(days=1)).strftime("%d-%m-%y")
         await update.effective_message.reply_text(
-            "Hi, I'm Xpensego. Tell me what you spend, or paste your bank SMS — I'll keep the ledger and answer anything about your money."
+            "Hi, I'm Xpensego 👋 Tell me what you spend, or paste your bank SMS — I'll keep the ledger and answer anything about your money."
         )
         await update.effective_message.reply_text(
             "Try it — paste this: `HDFC Bank: Rs.649.00 debited from a/c **1234 on "
@@ -78,6 +78,7 @@ async def csv_document(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if document.file_size and document.file_size > 1024 * 1024:
         await update.effective_message.reply_text("That CSV is over the 1 MB limit. Please send a smaller statement.")
         return
+    was_onboarded = await _is_onboarded(settings, user_id)
     file = await document.get_file()
     data = bytes(await file.download_as_bytearray())
     async with get_connection(settings.db_path) as db:
@@ -90,6 +91,10 @@ async def csv_document(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     await update.effective_message.reply_text(
         f"✓ Parsed {len(inserted)} entries · ₹{total:,.0f} debits. Reply with a number to fix a category."
     )
+    if not was_onboarded and await _is_onboarded(settings, user_id):
+        await update.effective_message.reply_text(
+            "That's it. Log something real, or set a budget anytime — like *food budget 5000*."
+        )
 
 
 async def text_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

@@ -6,6 +6,8 @@ from xpensego.handlers.parsing import parse_transactions, resolve_pending
 BLINKIT = "HDFC Bank: Rs.649.00 debited from a/c **1234 on 03-07-26 to VPA blinkit@ybl (UPI Ref No 654321987654)."
 ZOMATO = "Dear Customer, Rs.450.00 debited from A/c XX5678 on 02Jul26 towards ZOMATO ONLINE. Avl Bal Rs.23,456.78. -SBI"
 SALARY = "HDFC Bank: Rs.85,000.00 credited to a/c **1234 on 01-07-26 by a/c linked to VPA acmecorp.payroll@icici (ACME SALARY JUL)."
+SAMPLE = "HDFC Bank: Rs.649.00 debited from a/c **1234 on 03-07-26 to VPA blinkit@ybl (UPI Ref 000000424242)"
+REAL = "HDFC Bank: Rs.649.00 debited from a/c **1234 on 03-07-26 to VPA blinkit@ybl (UPI Ref No 654321987654)"
 
 
 def test_sms_parser_preserves_raw_input_categorizes_and_marks_credits(tmp_path):
@@ -22,6 +24,18 @@ def test_sms_parser_preserves_raw_input_categorizes_and_marks_credits(tmp_path):
             row = await (await db.execute("SELECT raw_input FROM entries WHERE id = 1")).fetchone()
             assert row[0] == BLINKIT
 
+    asyncio.run(exercise())
+
+
+def test_sample_and_real_sms_in_one_paste_only_dry_runs_the_sample(tmp_path):
+    async def exercise():
+        path = tmp_path / "xpensego.db"
+        await migrate(path)
+        async with get_connection(path) as db:
+            result = await parse_transactions(db, "u1", f"{SAMPLE}\n\n{REAL}")
+            assert len(result["inserted"]) == 2
+            assert result["inserted"][0]["dry_run"] is True
+            assert await (await db.execute("SELECT COUNT(*) FROM entries")).fetchone() == (1,)
     asyncio.run(exercise())
 
 

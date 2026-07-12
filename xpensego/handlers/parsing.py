@@ -159,7 +159,7 @@ async def parse_transactions(db: aiosqlite.Connection, user_id: str, raw_text: s
     inserted: list[dict[str, Any]] = []
     pending: list[dict[str, Any]] = []
     unknown_payees: list[str] = []
-    dry_run = SAMPLE_UPI_REF in raw_text
+    real_inserted = False
 
     for chunk in split_sms(raw_text):
         amount = _amount(chunk)
@@ -169,7 +169,7 @@ async def parse_transactions(db: aiosqlite.Connection, user_id: str, raw_text: s
         description = _description(chunk)
         category = _category(description)
         entry = {"type": txn_type, "amount": amount, "category": category, "description": description, "txn_date": _date(chunk)}
-        if dry_run:
+        if SAMPLE_UPI_REF in chunk:
             inserted.append({"id": None, **entry, "dry_run": True})
             continue
         if await _is_duplicate(db, ledger_id, entry):
@@ -205,9 +205,10 @@ async def parse_transactions(db: aiosqlite.Connection, user_id: str, raw_text: s
             ),
         )
         inserted.append({"id": cursor.lastrowid, **entry})
+        real_inserted = True
         if category == "Other" and txn_type == "debit" and re.search(r"\b(?:trf to|to)\s+[A-Z][A-Z ]+", chunk):
             unknown_payees.append(description)
-    if inserted and not dry_run:
+    if real_inserted:
         await db.execute(
             "UPDATE users SET onboarded_at = COALESCE(onboarded_at, datetime('now')) WHERE user_id = ?",
             (user_id,),

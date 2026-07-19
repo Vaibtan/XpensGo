@@ -1,5 +1,4 @@
-.agents
-.claude
+.claude/
 .env
 .venv/
 node_modules/

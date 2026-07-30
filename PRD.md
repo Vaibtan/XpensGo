@@ -1,209 +1,332 @@
-# Xpensego — Product Requirements Document (v1.0)
+# Xpensego — Product Requirements Document v2.2
 
-**Author:** Black · **Builder:** Black + partner (Hermes runs on partner's system)
-**Status:** Ready for build
-**Companion docs:** Product Document v0.2 (vision, positioning, risks) · Build Spec v2.1 (architecture — implements this PRD's [BUILD] scope; decision log at its top)
+**Status:** Canonical post-hackathon requirements
+**Updated:** 31 July 2026
+**Product authority:** [Product Document](./xpensego-product-doc.md)
+**Technical implementation:** [Technical Specification](./SPEC.md)
+**Delivery order:** [Delivery Checklist](./CHECKLIST.md)
 
----
+This document owns testable user, operator, and quality requirements. It does not redefine product rationale and validation signals from the Product Document, technical design from the Specification, or implementation sequencing from the Checklist.
 
-## 1. Purpose & scope of this document
+## 1. Purpose
 
-This PRD defines the complete Xpensego product — every confirmed feature — with each requirement tagged to a delivery tier:
+This document converts the Product Document's scope into stable requirement identifiers and acceptance conditions, separating invite-ready behavior from later channel and research work.
 
-- **[BUILD]** — Buildathon day. This is the definition of "done" for the 8-hour build. Nothing untagged jumps in.
-- **[v1.5]** — Weeks 1–4 post-buildathon.
-- **[v2]** — Built after the core loop shows validation signal (see Product Doc §11 success criteria).
+Requirement tags:
 
-Rule for build day: if hour-boundary checkpoints show slippage, cut [BUILD] items in the order given in §12, never by improvisation.
+- **[CORE]** — required before inviting the initial measured cohort.
+- **[WHATSAPP]** — required for the second messaging channel after the controlled-cohort continue decision.
+- **[POST-SIGNAL]** — considered only after the associated validation gate.
+- **[HOLD]** — explicitly not planned.
 
-## 2. Product summary
+`FEATURE-RESEARCH.md` informs prioritization but does not override these tags.
 
-Xpensego is a Telegram-based expense agent for Indian consumers. Users log expenses and income conversationally, paste bank/UPI SMS, or upload statements; the agent extracts, categorizes (14-category Indian-tuned taxonomy + learned payee memory), answers natural-language money questions number-first, and proactively alerts on budget thresholds. No app, no dashboard, no required habit.
+## 2. Scope mapping
 
-Positioning: *Your bank already tells you everything. Xpensego makes it mean something.*
+The [Product Document](./xpensego-product-doc.md#7-initial-product-scope) owns the scope boundary. The requirements below translate that boundary into testable behavior: **[CORE]** covers the invite-ready web and Telegram product, while **[WHATSAPP]**, **[POST-SIGNAL]**, and **[HOLD]** remain governed by their product gates.
 
-## 3. Users & platform
+## 3. Users, ledgers, and identities
 
-- **Persona (v1):** digitally-fluent Indian consumer, 22–35, UPI-heavy, has abandoned at least one expense app. Chat-native.
-- **Platform:** Telegram bot. The Telegram user ID is the account — no signup, no forms.
-- **Multi-tenancy:** hard per-user isolation. `user_id` is injected by the API layer from Telegram identity; the model never selects it. **[BUILD]**
-- **Conversation context:** agent holds the last ~10 messages per user (DB-loaded per request) so follow-ups and corrections work. **[BUILD]**
-- **Language:** English and Hinglish/code-mixed input are both first-class. No separate feature — but §11 test cases must pass. **[BUILD]**
+### FR-1 User account and personal ledger **[CORE]**
 
-## 4. Functional requirements — Capture
+- FR-1.1 A user can create and authenticate a web account.
+- FR-1.2 Every user receives one personal ledger.
+- FR-1.3 A ledger is isolated from every unrelated user.
+- FR-1.4 Every mutation records the authenticated user, initiating surface, and, where applicable, messaging channel identity.
+- FR-1.5 A user can link more than one channel identity to the same account.
+- FR-1.6 A channel identity can belong to only one user at a time.
+- FR-1.7 Linking and unlinking a channel requires an expiring, one-use verification flow.
 
-### FR-1 Manual logging **[BUILD]**
-Natural-text expense entry: "chai 30", "spent 1200 on groceries yesterday", "movie 450 last friday".
-- FR-1.1 Multiple entries in one message ("chai 30, auto 80, lunch 250") → multiple rows, one consolidated confirmation.
-- FR-1.2 Date resolution: agent resolves relative dates ("yesterday", "last Friday", "3 tarikh ko") against today's date; no date stated → today.
-- FR-1.3 **Confirmation always echoes the resolved date:** `✓ ₹500 · Food & Dining — 03/07/26`. This is the user's misparse safety net; never omit it.
-- FR-1.4 Missing amount → ask. Guessable category → guess and state it, don't interrogate. Max one clarifying question per message (global rule).
+**Acceptance:** a transaction created through Telegram is visible to the same linked user on the web; another user cannot read, query, modify, export, or delete it.
 
-**Acceptance:** the 25-message QA set (§11) logs with correct amount, category, date, and echoed-date confirmations; multi-entry messages produce N rows and one confirmation.
+### FR-2 Consent and notification preferences **[CORE]**
 
-### FR-2 Credits & income **[BUILD]**
-Users record money received: "salary 85000", "got 500 back from Amazon", "refund 1200".
-- FR-2.1 Every ledger row carries `type: debit | credit`.
-- FR-2.2 **Spend totals, budgets, and alerts count debits only.** Credits never net against spending unless the user explicitly asks ("net this month?").
-- FR-2.3 Credits are queryable: "how much did I receive this month?", "did my Amazon refund come?"
-- FR-2.4 SMS/statement parsing (FR-3) logs credits it finds, tagged as credits, same debits-only reporting rule.
+- FR-2.1 The product records the purpose, source, and time of consent for proactive notifications.
+- FR-2.2 Budget alerts, summaries, product announcements, and future recurring alerts have independent preferences.
+- FR-2.3 Transactional use does not imply marketing consent.
+- FR-2.4 Opt-out takes effect before the next outbound notification is selected.
+- FR-2.5 Users can choose detailed or privacy-preserving notification previews.
 
-**Acceptance:** logging salary then asking "how much did I spend this month" excludes it; "how much did I receive" includes it.
+## 4. Capture and imports
 
-### FR-3 SMS paste parsing **[BUILD]** — demo centerpiece
-Pasted bank/UPI SMS (one to fifty in a single paste) → parsed entries.
-- FR-3.1 Extract merchant, amount, date, debit/credit per SMS. Formats to support at minimum: HDFC, SBI, ICICI, Axis, Paytm, GPay/UPI notification styles (Black supplies the sample corpus).
-- FR-3.2 Categorize via taxonomy (FR-5) + payee memory (FR-6).
-- FR-3.3 **Raw input preserved** on every parsed row (original SMS text stored, user-invisible) for dispute resolution, parser debugging, and future re-categorization.
-- FR-3.4 Dedup: before insert, match on user + amount + date + fuzzy description; on hit, ask instead of double-logging.
-- FR-3.5 Output: compact summary — count, total, top 3 categories — plus "reply with a number to fix any category."
+### FR-3 Manual transaction logging **[CORE]**
 
-**Acceptance:** the 20-SMS demo block parses with ≥95% field accuracy; a re-pasted SMS triggers the dedup question, not a duplicate row.
+Users can record debits and credits through Telegram and the web application.
 
-### FR-4 Statement upload **[BUILD — first cut]**
-CSV bank statements → same pipeline as FR-3 (parse, categorize, dedup, raw-line preservation, summary). PDF statements: **[v2]**.
+- FR-3.1 Natural text can describe one or multiple transactions.
+- FR-3.2 Each transaction records direction, positive amount, currency, category, description, date, and source.
+- FR-3.3 Relative dates are resolved in the user's timezone.
+- FR-3.4 A missing amount produces one focused clarification rather than a guess.
+- FR-3.5 Every confirmation echoes amount, direction, category, and resolved date.
+- FR-3.6 Credits never reduce spending totals unless a query explicitly asks for net movement.
+- FR-3.7 Money is represented without floating-point rounding errors.
 
-### FR-4b Receipt photo OCR **[v1.5]**
-User sends a photo of a receipt/bill → vision model extracts merchant, total, date (line items when legible).
-- FR-4b.1 **Mandatory confirm step:** agent replies with the parsed entry; user confirms (or corrects) before it's logged. Never silent-log from OCR.
-- FR-4b.2 Failure cases to handle gracefully: blur, thermal fade, handwritten bills — reply with what was read and ask for the missing field.
-- FR-4b.3 Cost note: image calls cost multiples of text; instrument per-interaction cost from day one (feeds pricing work).
+### FR-4 Pasted transaction messages **[CORE]**
 
-## 5. Functional requirements — Categorization
+Users can paste one or more bank or UPI transaction messages through Telegram or the web application.
 
-### FR-5 Taxonomy **[BUILD]**
-Fixed 14 defaults: Food & Dining · Groceries · Transport · Rent & Utilities · Shopping · Entertainment · Health · Education · Personal Care · Subscriptions · Travel · Family & Gifts · Fees & Charges · Other.
-- FR-5.1 Indian-merchant mapping is the differentiator; canonical cases: Swiggy/Zomato→Food & Dining, Blinkit/Zepto/Instamart/BigBasket→Groceries, Uber/Ola/Rapido/petrol/FASTag→Transport, Netflix/Hotstar/gym→Subscriptions, bank/ATM/late fees→Fees & Charges. Port Aurum categorization prompts/patterns as the starting point.
-- FR-5.2 "Other" is monitored: entries landing there are a taxonomy-gap signal (review weekly).
+- FR-4.1 The import preserves each source record exactly as supplied.
+- FR-4.2 Extraction produces amount, direction, date, counterparty, description, currency, and confidence.
+- FR-4.3 The parser supports the maintained evaluation corpus of target Indian bank and payment formats.
+- FR-4.4 Records that cannot be parsed safely become review items; they are not silently dropped.
+- FR-4.5 Likely duplicates become review items; they are not silently inserted or discarded.
+- FR-4.6 Reprocessing the same channel event or import cannot create a second import.
+- FR-4.7 The user receives an import summary with inserted, review, duplicate, and failed counts.
+- FR-4.8 No messaging channel can access the user's device inbox.
 
-### FR-6 Payee memory **[BUILD]**
-Person-to-person UPI transfers carry no merchant signal.
-- FR-6.1 First occurrence of an unknown payee → one question ("What was the ₹5,000 to Rahul for?").
-- FR-6.2 Answer is stored per-user (payee → category); all future transfers to that payee auto-categorize silently. Never re-ask.
-- FR-6.3 User can revise: "transfers to Rahul are rent now" updates the mapping.
+### FR-5 CSV statement import **[CORE]**
 
-**Acceptance:** second transfer to a taught payee logs with zero questions.
+- FR-5.1 Users can upload a CSV statement through the web application or Telegram.
+- FR-5.2 The import detects common date, description, amount, debit, credit, and direction columns.
+- FR-5.3 The product previews its interpretation before committing ambiguous formats.
+- FR-5.4 Every resulting transaction retains its source row and import identifier.
+- FR-5.5 File-size, row-count, type, and processing limits are enforced before expensive work.
+- FR-5.6 Invalid rows are reported individually without losing valid rows from the same import.
+- FR-5.7 Imports expose durable progress and terminal status.
 
-### FR-7 Corrections **[BUILD]**
-- FR-7.1 "no, that's groceries" (within conversation context) re-categorizes the last-inserted entry and, where a payee/merchant is involved, updates payee memory so the correction sticks system-wide.
-- FR-7.2 "why did you categorize this as X?" → agent shows the stored raw input and its reasoning in two lines.
+### FR-6 Import review **[CORE]**
 
-### FR-8 Custom categories **[v1.5]**
-- FR-8.1 "create a category called Pet Care" → per-user category, usable everywhere defaults are.
-- FR-8.2 Overlap guard: if the request overlaps a default ("Fuel"), agent says so and offers subcategory vs new category. User's explicit choice wins.
-- FR-8.3 Cap: 10 custom categories per user. Renaming/deleting the 14 defaults: not allowed.
+- FR-6.1 The web application lists ambiguous, low-confidence, invalid, and likely duplicate records.
+- FR-6.2 A user can accept, edit, merge, skip, or retry a review item where applicable.
+- FR-6.3 Bulk acceptance and bulk category correction are available when the decision is unambiguous.
+- FR-6.4 Every decision is auditable and reversible until the configured undo period expires.
+- FR-6.5 Telegram can resolve a simple review item; complex or bulk review can deep-link to the web application.
 
-## 6. Functional requirements — Query & reports
+## 5. Categorization
 
-### FR-9 Natural-language queries **[BUILD]**
-User asks in ordinary words (English or Hinglish); agent translates to a scoped DB query; answer leads with the number, one line of context, no lectures.
-Must-pass query classes:
-- Totals: "how much on food this month?" → "₹6,240 on Food & Dining so far this July."
-- Comparisons: "this week vs last week" → "₹4,100 vs ₹5,650 — down 27%."
-- Superlatives: "biggest expense this month?" → "₹12,000 — rent, on the 2nd."
-- Listings: "what did I spend yesterday?" → short list, total on top.
-- Rates: "average daily spend?" → "₹930/day this month."
-- Credits: per FR-2.3.
-- Inference with a limit: vague asks ("how much did Goa cost me?") get at most one clarifying question, then answer.
+### FR-7 Default categories **[CORE]**
 
-**Acceptance:** all seven classes answer correctly against seeded data; every answer's first token block is the number.
+- FR-7.1 The beta launches with a stable Indian-oriented default taxonomy.
+- FR-7.2 Default category identifiers remain stable even if display labels change.
+- FR-7.3 "Other" is a visible quality signal, not a category where failures are hidden.
+- FR-7.4 Categorization quality is measured by source format, counterparty, and model or rule version.
 
-### FR-10 Weekly digest **[v1.5]**
-Sunday ~19:00 IST push, fixed 5-line format, nothing more:
-1. Week total vs last week (with direction)
-2. Top 3 categories with week-over-week change
-3. Single biggest expense
-4. Budget health one-liner ("Food at 68%, 12 days left")
-5. One plain observation ("Transport doubled — 6 cab rides vs your usual 2")
-- FR-10.1 Never promotional, never advice-lecturing. Opt-out with one message ("stop weekly summary"); opt back in likewise.
-- FR-10.2 Skip the digest entirely for users with zero entries that week (don't nag ghosts).
+### FR-8 Categorization rules **[CORE]**
 
-## 7. Functional requirements — Budgets & alerts
+- FR-8.1 Correcting a recognized counterparty can create or update a user-specific categorization rule.
+- FR-8.2 Future matching transactions apply the user's rule before a general model suggestion.
+- FR-8.3 The user can inspect, edit, disable, and delete their rules.
+- FR-8.4 A rule never affects another user's ledger.
+- FR-8.5 Rule application is deterministic and records which rule was used.
 
-### FR-11 Budgets **[BUILD]**
-- FR-11.1 "food budget 5000" → monthly per-category limit (upsert). "what are my budgets" → each budget with current-month spend vs limit.
+### FR-9 Transaction correction **[CORE]**
 
-### FR-12 Proactive alerts **[BUILD]**
-- FR-12.1 Daily check ~20:00 IST: for each budgeted category, alert at ≥80% and again at 100% of limit. `⚠️ Food & Dining: ₹4,150 of ₹5,000 (83%) with 9 days left.`
-- FR-12.2 Max one alert per category per threshold per month (sent-alerts ledger enforces).
-- FR-12.3 Manual trigger endpoint (`/trigger-alerts`) for the on-stage demo. **[BUILD]** Scheduler itself may fall to the cut order (§12); manual trigger may not.
+- FR-9.1 A user can correct amount, direction, date, description, counterparty, and category.
+- FR-9.2 A correction preserves the prior value in the audit history.
+- FR-9.3 The product distinguishes correcting one transaction from teaching a future categorization rule.
+- FR-9.4 Explanations show the source record, applied rule or model version, and confidence where available.
+- FR-9.5 Corrections made on web are reflected in subsequent Telegram answers.
 
-## 8. Functional requirements — Entry management
+## 6. Ledger control and data rights
 
-### FR-13 Delete last **[BUILD]**
-"delete that" / "remove the last one" → soft-delete the most recent entry (in-context), confirm in one line.
+### FR-10 Ledger review **[CORE]**
 
-### FR-14 Delete from the past **[v1.5]**
-- FR-14.1 Natural-language find-and-delete: "delete the 500 chai from Tuesday" → agent finds the entry; exact match → confirm-then-delete; 2–3 candidates → show them, user picks; no match → say so.
-- FR-14.2 Forwarded-SMS path: user forwards/re-pastes the original SMS → exact match via stored raw input → confirm-then-delete.
-- FR-14.3 All deletion is soft (excluded from every report and query; retained internally per the no-hard-delete audit rule). "undo delete" within the same conversation restores.
+- FR-10.1 The web application lists transactions with search, date, category, direction, source, and counterparty filters.
+- FR-10.2 Totals and filters exclude soft-deleted transactions by default.
+- FR-10.3 Users can inspect the source record and history of a transaction.
+- FR-10.4 Pagination does not expose or skip records because another user's data changed.
 
-### FR-15 Data rights **[BUILD for deletion · v1.5 for export]**
-- FR-15.1 "delete everything about me" → confirm once, then purge the user's data (this one is a hard delete — trust obligation trumps audit rule). **[BUILD]**
-- FR-15.2 "export my data" → CSV of the user's full ledger. **[v1.5]**
+### FR-11 Deletion and undo **[CORE]**
 
-## 9. Functional requirements — Onboarding
+- FR-11.1 Users can soft-delete one or more transactions.
+- FR-11.2 Soft-deleted transactions disappear from queries, budgets, and alerts.
+- FR-11.3 Deletion can be undone during the configured undo period.
+- FR-11.4 Permanent account deletion requires recent authentication and an explicit server-side confirmation state.
+- FR-11.5 Permanent deletion removes or irreversibly anonymizes all user-linked data according to the published data lifecycle.
+- FR-11.6 Permanent deletion completion is visible to the user and auditable without retaining the deleted financial contents.
 
-### FR-16 First-run flow **[BUILD]**
-`/start` → exactly three messages, no forms, no permissions:
-1. "Hi, I'm Xpensego. Tell me what you spend, or paste your bank SMS — I'll keep the ledger and answer anything about your money."
-2. A sample bank SMS + "try pasting this." Paste → categorized entry appears → product has proven itself in <30s with zero real data at risk.
-3. "That's it. Log something real, or set a budget anytime — like *food budget 5000*."
-- FR-16.1 Activation event (instrument it): first real (non-sample) logged entry.
+### FR-12 Export **[CORE]**
 
-## 10. Functional requirements — Shared groups **[v2 — designed now, built on signal]**
+- FR-12.1 Users can export their ledger in a documented machine-readable format.
+- FR-12.2 The export includes transactions, source type, categories, corrections, and timestamps.
+- FR-12.3 Export generation is asynchronous when it cannot complete within a normal request.
+- FR-12.4 Only the authenticated user can retrieve the finished export, and the download expires.
 
-### FR-17 Group ledgers
-- FR-17.1 Adding @XpensegoBot to a Telegram group makes that group a shared ledger keyed to the chat ID. Membership = Telegram membership; no invite flows built.
-- FR-17.2 Any member logs as in DM; the agent records **who paid** (from the sender's identity).
-- FR-17.3 Split default: equal among group members. Override inline: "dinner 2400, split with @arjun and @priya only" / "I paid 3000, split 2:1 with @arjun".
-- FR-17.4 Debt netting: "who owes whom?" → minimum-transfer settlement set ("Arjun → you ₹800; Priya → you ₹350").
-- FR-17.5 Settlements: "settled with Priya" records payment and updates the net.
-- FR-17.6 **Personal rollup:** each member's share of group expenses flows into their personal reports ("how much on food this month" in DM includes their slice of the group dinner). This is the differentiator over split-apps; do not cut it from the group design.
-- FR-17.7 Isolation: group ledger is visible to group members only; personal ledgers never leak into groups.
+## 7. Questions and insights
 
-**Schema requirement effective NOW [BUILD]:** every ledger row carries `ledger_id` (personal user ID or group chat ID) and `paid_by` from day one. Two columns today; surgery later.
+### FR-13 Structured ledger questions **[CORE]**
 
-### FR-18 Recurring-expense detection **[v2]**
-- FR-18.1 Detect recurring debits from ledger history: same/similar payee + similar amount + regular interval (monthly, weekly) over ≥2–3 cycles. Candidates: rent, subscriptions, EMIs, SIP debits, mobile recharge.
-- FR-18.2 Surface, don't assume: on detection, one message — "Netflix ₹649 has hit on the 5th for 3 months. Track it as recurring?" User confirms; never auto-mark.
-- FR-18.3 Confirmed recurring entries unlock: "what are my fixed costs?" (monthly committed total vs discretionary spend), a missed-recurrence note ("your rent debit hasn't appeared yet this month"), and an increase alert ("Netflix charged ₹799, up from ₹649").
-- FR-18.4 Dependency note: needs several weeks of real ledger data to detect anything — this is why it is v2 by nature, not just by priority. No schema change required now (detection runs on existing rows).
+Users can ask ordinary-language questions through Telegram and the web application.
 
-## 11. QA set (build-day, minimum)
+- FR-13.1 Supported questions include totals, comparisons, largest transactions, listings, averages, credits, counterparties, categories, and budget status.
+- FR-13.2 Answers use structured, server-scoped query operations; a model never writes executable database queries.
+- FR-13.3 Every query derives its ledger from authenticated context rather than model or client input.
+- FR-13.4 Spending defaults to debits.
+- FR-13.5 Answers lead with the requested number or result.
+- FR-13.6 An unsupported question receives a bounded explanation instead of a fabricated answer.
+- FR-13.7 The answer can disclose which dates, ledger, and transaction set were used.
+- FR-13.8 Xpensego does not present a partial ledger as financial advice or certainty.
 
-- 25 manual-log messages: English + Hinglish mixed ("aaj 200 ka petrol", "bhai ko 500 bheje", "chai 30 auto 80 lunch 250"), relative dates, missing amounts, credits.
-- 20-SMS paste corpus (HDFC/SBI/ICICI/Axis/Paytm/GPay formats; include one Blinkit + one Zomato; include 2 credits; include 1 duplicate).
-- 7 query classes from FR-9 against seeded data.
-- Payee-memory loop: unknown payee → teach → silent auto-categorize on repeat.
-- Correction loop: wrong category → "no, that's X" → verify persistence.
-- Onboarding: fresh account `/start` → sample paste → real entry.
-- Isolation check: two test users; verify zero cross-visibility.
+### FR-14 Projections **[POST-SIGNAL]**
 
-## 12. Build-day cut order (bottom cuts first)
+- FR-14.1 A projection lists the records and assumptions on which it depends.
+- FR-14.2 Missing balances, income, liabilities, or recurring costs reduce confidence and are disclosed.
+- FR-14.3 A projection is not labelled as an affordability verdict or financial advice.
 
-1. CSV upload (FR-4)
-2. Alert scheduler (keep manual `/trigger-alerts`)
-3. Delete-last (FR-13)
-4. Credits parsing in SMS (keep manual credit logging)
-Never cut: FR-1, FR-3, FR-5/6, FR-9, FR-16, rehearsal hour, isolation, echoed-date confirmations.
+## 8. Budgets and notifications
 
-## 13. Non-functional requirements
+### FR-15 Monthly category budgets **[CORE]**
 
-- **Latency (happy path, single tool iteration):** manual log confirm <5s; bulk SMS parse <15s for 20 SMS; queries <8s.
-- **Isolation:** user_id injected server-side, never model-chosen. **[BUILD]**
-- **Auditability:** raw input stored on parsed rows; soft deletes; corrections logged. **[BUILD]**
-- **Cost instrumentation:** per-interaction LLM cost logged per user from day one — pricing (open) is blocked on this data. **[BUILD]**
-- **Tone contract:** one-line confirmations; number-first answers; ≤1 clarifying question per message; off-topic → brief answer + steer back; alerts and digest are the only proactive contact.
+- FR-15.1 Users can create, change, list, and remove monthly category budgets.
+- FR-15.2 Budget usage counts live debit transactions only.
+- FR-15.3 Web and messaging surfaces show spent, remaining, percentage used, and days remaining.
+- FR-15.4 The configured user timezone determines month boundaries.
 
-## 14. Out of scope (all tiers, restated)
+### FR-16 Budget alerts **[CORE]**
 
-Pricing/payments (open decision) · WhatsApp channel (v2 gate, tied to unit economics) · automatic SMS ingestion via Android permissions · PDF statements before v2 · multi-currency · investments/credit/loans/insurance · family super-features beyond FR-17 · renaming default categories.
+- FR-16.1 Users can opt into threshold alerts per channel.
+- FR-16.2 The initial thresholds are 80% and 100%; each threshold is sent at most once per budget month.
+- FR-16.3 Notification selection and delivery are separate states.
+- FR-16.4 A classified transient delivery failure is retryable and is not recorded as delivered. Terminal failures and outcome-unknown attempts are not retried blindly.
+- FR-16.5 Alert history distinguishes selected, attempted, provider-accepted, delivered or read where the channel reports it, outcome-unknown, failed, and suppressed outcomes.
+- FR-16.6 A privacy-preserving template does not expose amount or category in the notification preview.
 
-## 15. Metrics (instrument at [BUILD])
+## 9. Web application
 
-Activation (first real entry) · week-2 paste-through rate (target ≥40%; kill/pivot signal <15% per Product Doc §11) · entries per active user per week · query rate · correction rate (categorization-quality proxy) · "Other" category share (taxonomy-gap proxy) · cost per active user per month · alert opt-out rate (post-v1.5: digest opt-out rate).
+### FR-17 Web control surface **[CORE]**
 
-## 16. Open items
+The web application provides:
 
-Pricing (blocked on cost + willingness-to-pay data) · WhatsApp timing · v2 build triggers (which §15 signals green-light FR-17 groups and FR-18 recurring) · custom-category cap (10 — revisit on demand) · partner continuation post-event.
+- onboarding and Telegram linking;
+- ledger and transaction detail;
+- import progress and review;
+- categories and categorization rules;
+- budgets and notification preferences;
+- structured conversational insights;
+- export and account deletion;
+- privacy and consent information.
+
+- FR-17.1 Core workflows are usable on mobile-width screens.
+- FR-17.2 Financial totals are not cached across users or beyond their valid authorization context.
+- FR-17.3 Accessibility is tested for keyboard operation, labels, focus, contrast, and error announcements.
+
+## 10. Telegram
+
+### FR-18 Telegram channel **[CORE]**
+
+- FR-18.1 Telegram uses webhooks in production.
+- FR-18.2 Every update is authenticated as originating from the configured bot integration.
+- FR-18.3 The Telegram update identifier provides idempotency.
+- FR-18.4 Webhook acknowledgement is independent from downstream model and import processing.
+- FR-18.5 Telegram channel identity is linked to a web user through a one-use flow.
+- FR-18.6 The bot supports manual capture, pasted messages, CSV uploads, review prompts, queries, budgets, alerts, and settings deep links.
+- FR-18.7 Until shared ledgers are implemented, group-chat requests are rejected without exposing personal ledger data.
+- FR-18.8 Outbound messages have durable delivery-attempt records.
+
+## 11. WhatsApp
+
+### FR-19 WhatsApp channel **[WHATSAPP]**
+
+- FR-19.1 WhatsApp uses Meta's supported Business Platform integration.
+- FR-19.2 WhatsApp identity links to the same user and ledger as web and Telegram.
+- FR-19.3 Incoming events and message-status events are idempotent.
+- FR-19.4 Free-form replies respect the active customer-service window.
+- FR-19.5 Proactive messages outside that window use approved templates.
+- FR-19.6 Consent, template category, delivery state, quality signals, and per-message cost are recorded.
+- FR-19.7 Users can choose privacy-preserving proactive templates.
+- FR-19.8 Media retrieval is authenticated, size-limited, scanned, and copied into controlled storage before processing.
+- FR-19.9 WhatsApp does not enter its bounded cohort until the initial controlled cohort produces an explicit decision to continue and channel-specific cost is observable; this does not imply that broader business-signal metrics have passed.
+
+## 12. Analytics, quality, and operations
+
+### FR-20 Product analytics **[CORE]**
+
+The product records, without placing financial contents in analytics payloads:
+
+- onboarding started and completed;
+- channel linked;
+- first real transaction;
+- import started, completed, partially completed, and failed;
+- review-item outcomes;
+- categorization correction and rule creation;
+- query class and outcome;
+- budget and notification actions;
+- export and deletion lifecycle;
+- active-user and cohort retention;
+- model usage and cost;
+- notification selection, delivery, failure, suppression, and opt-out.
+
+### FR-21 Operator capabilities **[CORE]**
+
+- FR-21.1 Operators can inspect health, queue depth, error rates, delivery failures, model cost, and import-quality aggregates without casually accessing transaction contents.
+- FR-21.2 Sensitive support access is explicit, time-bounded, and audited.
+- FR-21.3 A global kill switch can stop expensive model work and proactive notifications independently.
+- FR-21.4 Before external real-data use, the selected production recovery path has passed restoration against approved recovery objectives.
+- FR-21.5 Production capacity has measured headroom for the controlled-cohort load profile and documented provider limits.
+
+## 13. Research-gated capabilities
+
+The [Product Document's deferred scope and research interpretation](./xpensego-product-doc.md#8-explicitly-deferred) own the evidence gates. These identifiers reserve traceability without committing delivery:
+
+| Requirement | Status | Constraint if later promoted |
+| --- | --- | --- |
+| FR-22 Shared ledgers | **[POST-SIGNAL]** | Requires an approved experiment covering isolation, personal rollups, and acquisition or retention value. |
+| FR-23 Recurring-expense detection | **[POST-SIGNAL]** | Requires sufficient longitudinal data and user confirmation of candidates. |
+| FR-24 Tax-oriented exports | **[POST-SIGNAL]** | Requires direct demand evidence and must not imply tax correctness. |
+| FR-25 Account Aggregator connectivity | **[POST-SIGNAL]** | Begins with partner, regulatory, consent, coverage, and unit-economics discovery. |
+| FR-26 Deferred expansion | **[HOLD]** | Remains outside committed scope until the product authority changes. |
+
+## 14. Non-functional requirements
+
+### Security and isolation
+
+- All user and ledger scope is injected from authenticated server context.
+- Secrets are managed outside source control.
+- Webhook signatures or platform secrets are verified.
+- Authorization tests cover every read, mutation, export, and destructive flow.
+- Financial contents do not appear in application logs, product analytics, or exception messages by default.
+
+### Reliability and idempotency
+
+- Every external event and job has a stable idempotency key.
+- Retried domain operations converge on one state. External provider attempts retry only after a known-transient failure or when proven provider idempotency makes the retry safe; ambiguous outcomes are reconciled or surfaced.
+- An accepted event is persisted before acknowledgement where the channel permits it.
+- Outbound selection, attempt, provider acceptance, delivery where observable, and outcome-unknown are distinct states.
+
+### Auditability
+
+- Source records are immutable.
+- Corrections and destructive actions retain a content-minimized audit trail.
+- Prompt, rule, parser, and model versions are attributable.
+
+### UX latency budgets
+
+These figures are initial experience budgets, not finalized service-level objectives. Before invitation, each budget is assigned a percentile, measured against a documented controlled-cohort load profile, and evidenced in production-shaped staging.
+
+- A normal web ledger request reaches useful content within two seconds under the controlled-cohort load profile.
+- A simple Telegram manual-log confirmation is visible to the user within five seconds when no asynchronous import is required. Webhook acknowledgement is a separate transport obligation and does not wait for that response.
+- Long imports acknowledge immediately and expose progress.
+- Supported money queries complete within eight seconds under the controlled-cohort load profile.
+
+### Accessibility and mobile use
+
+- Core web workflows meet WCAG 2.2 AA expectations.
+- Ledger review, imports, correction, budgets, export, and deletion are usable on a mobile browser.
+
+## 15. Evaluation and release gates
+
+The maintained evaluation suite includes:
+
+- manual logging in English and Hinglish;
+- target bank and UPI message formats;
+- CSV variants;
+- duplicate and idempotency cases;
+- categorization-rule learning;
+- correction and undo;
+- supported query classes;
+- cross-user isolation;
+- notification idempotency and failure recovery;
+- export and permanent deletion;
+- Telegram end-to-end flows.
+
+Release and roadmap decisions use the [Product Document's success gates](./xpensego-product-doc.md#11-success-gates). The [Delivery Checklist](./CHECKLIST.md) owns the evidence sequence. No **[CORE]** requirement is release-complete until its behavior, non-functional requirements, and production-shaped evidence are linked.
+
+## 16. Open requirements
+
+Product-level decisions, including pricing and category-product policy, live in the [Product Document](./xpensego-product-doc.md#14-open-product-decisions).
+
+- Exact authentication and account-recovery experience.
+- Import file-size and row-count limits after performance measurement.
+- Undo retention and source-record retention periods.
+- The initial notification-detail default.
+- Percentiles and the controlled-cohort load profile for the UX latency budgets; these are invitation-blocking decisions.

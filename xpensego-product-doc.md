@@ -1,94 +1,219 @@
-# Xpensego — Product Document (v0.2)
+# Xpensego — Product Document v1.4
 
-**Product name:** Xpensego (confirmed)
-**Author:** Black · **Status:** Draft for review
-**Origin:** 8-hour buildathon (Revenue track, Hermes required) treated as the seed of a real product, not a throwaway prototype.
-**Related docs:** PRD v1.0, Build Spec v2.1, Demo Script (PRD companion).
+**Status:** Post-hackathon product direction
+**Updated:** 31 July 2026
+**Companion documents:** [PRD](./PRD.md) · [Technical Specification](./SPEC.md) · [Delivery Checklist](./CHECKLIST.md) · [Feature Opportunity Map](./FEATURE-RESEARCH.md)
 
----
+This document owns the product thesis, target user, scope boundaries, business model, risks, roadmap, and validation gates. The PRD owns testable behavior, the Technical Specification owns implementation constraints, and the Delivery Checklist owns sequencing and evidence.
 
-## 1. One-liner
+## 1. Product thesis
 
-Xpensego is an expense agent that lives in your messaging app. Paste your bank SMS or just tell it what you spent — it categorizes everything correctly, answers any question about your money in plain language, and warns you before a budget blows.
+Xpensego is a chat-native expense product that turns transaction records a user already has into a trustworthy, categorized ledger. A user can paste a bank or UPI message, upload a CSV statement, or describe a transaction in ordinary language; Xpensego organizes it, lets the user correct it, answers questions about it, and sends only the alerts the user has requested.
 
-## 2. The problem
+The product is not merely a Telegram bot and it is not a dashboard-first finance application. Messaging provides low-friction capture and answers. The web application provides the control and trust surface: review, correction, imports, budgets, settings, export, and deletion.
 
-Indian consumers do not lack expense *data* — every transaction already generates a bank SMS, a UPI notification, or a statement line. What they lack is expense *meaning*. The existing tools fail in a specific, consistent way: automatic trackers (bank apps, Jupiter, Axio, ET Money) capture transactions effortlessly but categorize them badly — a Blinkit grocery run and a Zomato dinner both land in "Food," rent transfers show up as "UPI to person," and the insights tab becomes noise the user stops opening. Manual trackers get categories right but demand a daily data-entry habit that almost nobody sustains past week three; this is the pattern that killed a generation of Indian expense apps.
+**Positioning:** *Your bank already tells you everything. Xpensego makes it mean something.*
 
-The result is a population that is transacting digitally at massive scale and still answering "how much did I spend on food this month?" with a guess.
+## 2. Problem
 
-An important honesty note carried over from early scoping: **the depth of categorization pain as a paid problem is asserted, not yet evidenced.** Validating that users notice and care about miscategorization — enough to change behavior or pay — is an explicit early milestone, not an assumption to build on silently. (See §10, Risks.)
+Indian consumers generate abundant transaction data through UPI, cards, bank messages, and statements, but that data rarely becomes a ledger they trust.
 
-## 3. Who it's for
+Automatic trackers reduce entry effort but often collapse distinct spending into broad or incorrect categories. Manual trackers provide control but demand a habit that is difficult to sustain. When a ledger is incomplete or wrong, its reports and alerts quickly become irrelevant.
 
-**Primary persona (v1):** the digitally-fluent Indian consumer, roughly 22–35, salaried or freelancing, transacting predominantly through UPI and cards, living inside WhatsApp and Telegram all day. They have tried an expense app at least once and abandoned it. They don't want a new app, a dashboard, or a habit — they want answers when they ask and a warning before they overspend.
+Xpensego's hypothesis is that a useful product can combine:
 
-**Deliberately deferred (v2 candidate):** small business owners tracking business expenses over chat. This segment likely has higher willingness to pay (tax pressure, CA relationships, GST) and fits Black's B2B background, but v1 stays B2C to validate the core categorize-and-converse loop with the simplest possible user. This deferral is a conscious decision, revisit after buildathon signal.
+1. Low-friction, user-initiated capture from records the user already has.
+2. Classification that learns from corrections.
+3. A visible review path that makes the ledger trustworthy.
+4. Answers and alerts delivered through channels the user already uses.
 
-## 4. Why now
+The unresolved business question is whether this improvement is valuable enough to create durable usage and willingness to pay.
 
-Three curves are crossing. UPI has made every spend a text-visible event, so the raw data problem is solved nationally. LLMs have made messy-text-to-clean-category a solved problem at near-zero marginal engineering cost — categorization quality, the thing incumbents fumble with rules engines, is now a prompt-and-evals problem (and Black has a direct asset here: Aurum's categorization engine runs at 96.4% accuracy, so the hardest capability is a port, not an invention). And chat-native agents have normalized the interface: users no longer need convincing that "text a bot" is a product.
+## 3. Target user
 
-## 5. The product
+The first target is a digitally fluent Indian consumer who:
 
-Xpensego is a Telegram agent (WhatsApp later) with three capabilities and deliberately nothing else.
+- primarily transacts through UPI and cards;
+- has abandoned at least one expense tracker;
+- wants answers and warnings more than a complex finance dashboard;
+- is willing to paste transaction messages or periodically upload a CSV statement;
+- values control over how their financial records are categorized and retained.
 
-**Capture without discipline.** The user pastes bank/UPI SMS — one or fifty — or drops a CSV statement, and Xpensego extracts and categorizes every debit. Manual logging ("chai 30, auto 80") works too, for cash and the gaps. The design principle: the user should never *owe* Xpensego a habit; they feed it whatever they already have, whenever they remember.
+Small-business and GST-oriented use cases remain a pivot option. They are not a parallel first-release persona.
 
-**Categorization that's actually right.** A fixed 14-category taxonomy tuned for Indian spending (the Blinkit-vs-Zomato split is the flagship example), plus a per-user payee memory: when Xpensego asks once what a UPI transfer to a person was for, it never asks about that payee again. Corrections are conversational — "no, that's groceries" — and stick.
+## 4. Core product loop
 
-**Answers and warnings, not dashboards.** Any question about spending gets a number-first answer in one message. Budgets are set in one line ("food budget 5000") and Xpensego proactively messages when a category crosses 80% and 100% of its limit. There is no app to open. The agent comes to you exactly twice a month per category at most, and only when it matters.
+The product succeeds only if this loop repeats:
 
-## 6. Positioning
+1. **Supply records:** the user logs a transaction, pastes one or more transaction messages, or uploads a CSV statement.
+2. **Normalize:** Xpensego extracts transactions, preserves their source records, detects likely duplicates, and assigns categories.
+3. **Review:** the user sees what was understood, corrects mistakes, and resolves uncertain records.
+4. **Learn:** corrections create categorization rules that improve future imports.
+5. **Use the ledger:** the user asks questions, reviews spending, or monitors budgets.
+6. **Return for value:** a useful answer or requested alert gives the user a reason to keep the ledger current.
 
-**Against auto-trackers (Jupiter, Axio, bank apps):** they capture everything and understand nothing; Xpensego understands. Their insights are a tab you forget; Xpensego's are a message you receive.
+Capture without review creates an untrusted ledger. Insights without repeated capture become stale. Both halves of the loop are core.
 
-**Against manual trackers and spreadsheets:** they demand discipline; Xpensego demands nothing. Paste when you feel like it — the ledger stays coherent.
+## 5. Product surfaces and channels
 
-**Against "just use ChatGPT":** a general chatbot has no persistent ledger, no per-payee memory, no proactive alerts, and forgets you between sessions. Xpensego is an agent with state, not a conversation.
+This section assigns each surface a product role. Detailed behavior belongs to the linked PRD requirements.
 
-**Positioning sentence:** *Your bank already tells you everything. Xpensego makes it mean something.*
+### Web application
 
-## 7. What Xpensego is not (scope guardrails)
+The web application is the authoritative control and trust surface for onboarding, review, correction, settings, data rights, and deeper ledger use. See the [web requirements](./PRD.md#9-web-application).
 
-Not a personal finance super-app: no investments, no credit scores, no loans, no insurance. Not an auto-ingestion service in v1: no Android SMS-permission integration (a privacy, trust, and Play Store rabbit hole — pasting is the v1 contract). Not a general assistant: off-topic messages get a brief answer and a steer back. Not a family/shared ledger yet. Not priced yet — see §9.
+### Telegram
 
-## 8. Product principles
+Telegram is the first messaging channel because it supports rapid product iteration with relatively little platform friction. It participates in the same core loop rather than operating as a separate reduced product. See the [Telegram requirements](./PRD.md#10-telegram).
 
-One: never require a habit; reward whatever the user gives. Two: one-line responses; the number first; no lectures. Three: never ask two questions in one message. Four: every correction teaches the system permanently (payee memory). Five: proactive contact is rare, budget-linked, and never promotional. Six: the user's data is theirs — per-user isolation is architectural (enforced in the API layer, never trusted to the model), and no customer data touches shared agent memory.
+### WhatsApp
 
-## 9. Business model — explicitly open
+WhatsApp is the second messaging channel and reuses the same product capabilities through a channel adapter. It is sequenced after the initial controlled cohort produces an explicit decision to continue; passing that decision does not imply that the broader business-signal gate has passed. See the [WhatsApp requirements](./PRD.md#11-whatsapp).
 
-**Pricing is not decided.** A ₹50/month figure was floated early and retired: it was chosen for psychological plausibility, not derived from unit economics, and preliminary reasoning suggests engaged-user infra costs (LLM calls, and WhatsApp conversation fees if/when that channel ships) could exceed it. Before any price is set, the following must exist: measured cost per active user per month from real usage, willingness-to-pay signal from actual trial users, and a decision between subscription, freemium-with-caps, or an alternate model (e.g., free consumer tier funding a paid small-business tier).
+No messaging channel can access the user's device inbox. Transaction records are supplied deliberately by the user.
 
-**What is decided:** the monetizable asset is the categorized, queryable ledger and the proactive-alert layer on top of it — not capture, which is free everywhere and monetizes nowhere. The Revenue-track story is honest: "the retention hook is built; pricing is in validation."
+## 6. Product principles
 
-## 10. Risks — stated plainly
+1. **Trust before intelligence.** Every imported transaction can be traced to a source record and corrected.
+2. **The user owns the data.** Isolation, export, and permanent deletion are product capabilities, not support procedures.
+3. **Corrections compound.** A correction should reduce future correction effort.
+4. **The model is not the authority.** Identity, ledger access, arithmetic, data mutation, and deletion constraints are enforced outside the model.
+5. **One product across surfaces.** Web, Telegram, and later WhatsApp share one user and one ledger.
+6. **Low-friction capture, optional control.** Messaging is fast; the web application is available when deeper review is needed.
+7. **Proactive contact is earned.** Alerts require explicit consent, are useful rather than promotional, and respect channel rules.
+8. **Projections disclose their limits.** Xpensego does not present incomplete financial records as financial advice or certainty.
+9. **Measure before monetizing.** Pricing follows observed usage, cost, and willingness-to-pay evidence.
 
-**Demand risk (biggest):** categorization pain may be a shrug, not a purchase. Users may not notice miscategorization because they never open insights at all — in which case the problem isn't bad categories, it's indifference, and Xpensego inherits it. Mitigation: the buildathon and immediate post-launch trials are structured to test this first (see §11).
+## 7. Initial product scope
 
-**Behavior risk:** even pasting SMS is a habit of sorts. If users won't paste weekly, the ledger goes stale and answers lose value. Mitigation: the alert layer creates a reason to keep the ledger fed; measure paste-frequency decay from day one.
+The invite-ready core is the PRD's **[CORE]** requirement set. At product level, it covers:
 
-**Graveyard risk:** this category has killed many funded attempts (Walnut et al.). The bet is that the failure mode was manual-entry discipline plus dashboard interfaces, both of which Xpensego removes. That is a thesis, not a fact.
+- one personal ledger across the web application and Telegram;
+- deliberate capture through manual entry, pasted transaction messages, and CSV statements;
+- traceable imports, review, correction, categorization rules, and ledger control;
+- structured questions, monthly budgets, and consented alerts;
+- export, permanent deletion, product measurement, and safe operation.
 
-**Moat risk:** everything here is buildable by an incumbent in a quarter. Near-term defensibility is speed, categorization quality (Aurum head start), and per-user payee memory that compounds. Long-term defensibility is unresolved.
+The [PRD](./PRD.md) is authoritative for the individual behaviors and acceptance conditions.
 
-**Platform risk:** Telegram penetration in India is far below WhatsApp's; WhatsApp Business API adds cost and approval friction. v1 accepts Telegram's smaller reach for zero-friction launch; the WhatsApp decision is a v2 gate tied to unit economics.
+## 8. Explicitly deferred
 
-## 11. Success criteria
+These are not part of the initial controlled-cohort scope:
 
-**Buildathon day:** the live demo lands (SMS paste → categorized table → query → on-stage budget alert), judges register the architecture and honesty of the revenue story, and — the real prize — at least 10 people in the room add the bot and log something real.
+- WhatsApp;
+- shared ledgers and expense splitting;
+- recurring-expense detection;
+- affordability projections;
+- tax-specific bundles;
+- Account Aggregator connectivity;
+- receipt OCR and voice logging;
+- automatic device SMS access;
+- investments, loans, credit scores, insurance, or net-worth tracking;
+- PDF statement ingestion;
+- production payment collection.
 
-**First 30 days after:** 50+ real users acquired without paid spend; ≥40% paste transactions in week 2 (the behavior-risk test); a measured cost-per-active-user number; 10 user conversations that produce direct evidence for or against the categorization-pain thesis.
+Schema and module decisions may preserve room for a known later capability, but deferred behavior is not implemented speculatively.
 
-**Kill/pivot signal:** if week-2 paste-through falls under 15% and user conversations show indifference to category accuracy, the B2C thesis is weak — pivot evaluation toward the small-business segment rather than pushing consumer harder.
+## 9. Research interpretation
 
-## 12. Roadmap sketch
+`FEATURE-RESEARCH.md` provides useful evidence, not an automatic build order.
 
-**v1 (buildathon):** Telegram · SMS paste + manual log + CSV · 14-category taxonomy · payee memory · natural-language queries · budgets + alerts.
-**v1.5 (weeks 1–4):** onboarding polish · correction flows hardened · usage/cost instrumentation · pricing research.
-**v2 (conditional on signal):** WhatsApp channel · pricing live · small-business/GST mode evaluation · PDF statements.
+- Splitwise dissatisfaction justifies testing shared ledgers; it does not yet prove cross-sell into paid personal finance.
+- Recurring detection is valuable only after users produce reliable longitudinal data.
+- "Can I afford this?" must be framed as a projection based on available records, not a verdict.
+- Account Aggregator connectivity is strategically interesting but depends on partnership, regulatory, cost, and consent constraints.
+- Tax exports need direct user validation before they become committed scope.
+- Receipt OCR, voice input, investments, and net-worth expansion remain on hold.
 
-## 13. Open decisions (owner: Black)
+## 10. Business model
 
-Pricing model and price (blocked on §9 prerequisites). B2C persistence vs small-business pivot criteria (draft in §11, confirm). WhatsApp timing. Whether buildathon partner continues post-event and on what terms.
+Pricing remains intentionally undecided.
+
+The working monetization boundary is:
+
+- **Free foundation hypothesis:** capture, review, correction, basic ledger access, export, and deletion. Final packaging remains an evidence-driven decision.
+- **Potential paid value:** advanced intelligence, automation, projections, longer analytical history, premium notification workflows, and costly external integrations.
+
+Before payment collection is implemented, Xpensego must have:
+
+1. Measured cost per active user and per major workflow.
+2. Evidence that users keep their ledgers current.
+3. Evidence that users repeatedly use queries, alerts, or review features.
+4. Direct willingness-to-pay conversations and a testable tier hypothesis.
+5. Clear entitlements that do not remove a capability users were previously promised for free.
+
+## 11. Success gates
+
+### Product-quality gate
+
+- Known transaction-message formats meet the agreed extraction evaluation target.
+- Critical amounts, transaction direction, and dates are never silently invented.
+- Cross-user isolation and destructive data flows pass end-to-end tests.
+- Every low-confidence or duplicate import reaches review instead of silently corrupting the ledger.
+
+### Invite-readiness gate
+
+- The product-quality gate passes against production-shaped infrastructure.
+- Critical isolation, authorization, export, deletion, and consent flows pass end to end.
+- Production recovery, capacity, and cost controls satisfy the [Technical Specification's external-user requirements](./SPEC.md#16-deployment-topology) and are evidenced by the [Delivery Checklist](./CHECKLIST.md). No external user supplies real financial data before that evidence passes.
+- Monitoring, cost controls, operational runbooks, and independent kill switches for model work and proactive notifications are operational.
+
+### Initial controlled-cohort outcome
+
+- Before invitation, define the cohort observation window, minimum interview count, quality and cost thresholds, and safety stop conditions.
+- Only after invite readiness passes, invite 10–15 users and require at least 10 to complete the real onboarding flow before the cohort decision.
+- Activation and time-to-first-value are measured.
+- Import success, correction rate, "Other" share, query use, and alert delivery are observable.
+- Users can export and permanently delete their data without manual operator intervention.
+- The evidence produces an explicit decision to continue, narrow, pivot, or stop. A continue decision is the prerequisite for the bounded WhatsApp phase.
+
+### Business-signal gate
+
+This broader gate follows the controlled-cohort decision. Its validation period, activation denominator, and qualifying week-two contribution event are defined before measurement begins. The working signals are:
+
+- 50 or more real users without paid acquisition during the first validation period;
+- at least 40% of activated users supplying transactions again in week two;
+- measured cost per active user;
+- at least 10 structured user conversations about categorization quality, trust, and willingness to pay.
+
+If week-two contribution falls below 15% and interviews show indifference to ledger accuracy, the B2C thesis should be reconsidered before expanding the roadmap.
+
+Passing this broader gate is not implied by a controlled-cohort decision to continue. It remains required before **[POST-SIGNAL]** product expansion.
+
+## 12. Risks
+
+**Demand risk:** Better categorization may be appreciated but not paid for.
+
+**Behavior risk:** Pasting records is still a habit; an incomplete ledger loses value.
+
+**Trust risk:** A single silent duplicate, wrong amount, or privacy surprise can outweigh many correct classifications.
+
+**Channel risk:** Telegram is easy to build but has lower reach in India; WhatsApp has higher reach but greater policy, approval, and cost constraints.
+
+**Moat risk:** The individual features are reproducible. Defensibility must come from accumulated user corrections, trust, workflow quality, and eventually privileged ingestion partnerships.
+
+**Cost risk:** Model and WhatsApp costs can undermine low-price consumer subscriptions.
+
+**Scope risk:** Research opportunities can distract from completing and validating the core loop.
+
+**Platform risk:** The Cloudflare-native architecture lowers operational burden but introduces runtime constraints, hard limits, and provider-specific failure modes. The accepted infrastructure policies live in the [Technical Specification](./SPEC.md) and [ADRs](./docs/adr/); the Delivery Checklist must evidence them before external real-data use.
+
+## 13. Roadmap
+
+1. **Foundation:** establish the smallest production-shaped technical foundation required by the [Technical Specification](./SPEC.md) for the first vertical slice.
+2. **Invite-ready core:** capture, imports, review, categorization rules, queries, budgets, alerts, data rights, and the invite-readiness evidence.
+3. **Initial controlled cohort:** run the approved cohort, review product and operating evidence, and make the controlled-cohort decision.
+4. **WhatsApp channel after a continue decision:** Cloud API integration, templates, consent, delivery tracking, and cost controls.
+5. **Broader business validation:** expand the measured cohort, complete pricing research, and evaluate the business-signal gate.
+6. **Post-signal roadmap:** promote only deferred capabilities whose product and evidence gates pass.
+
+The [Delivery Checklist](./CHECKLIST.md) owns the executable phase and dependency breakdown.
+
+## 14. Open product decisions
+
+- The exact initial category taxonomy and customization policy.
+- Whether the first web conversational experience is a full chat surface or contextual queries from ledger views.
+- The product thresholds that graduate WhatsApp from implementation to public availability.
+- Pricing tiers and entitlements.
+- Whether shared ledgers become an acquisition feature, a retention feature, or remain out of scope.
+- The evidence required to pursue the small-business/GST pivot.

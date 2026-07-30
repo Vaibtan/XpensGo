@@ -1,126 +1,271 @@
-# Xpensego — Build Checklist
+# Xpensego — Post-Hackathon Delivery Checklist
 
-**Source:** PRD v1.0 + Build Spec v2.1 (decision log at its top governs every ticket).
-**How to work it:** each ticket is a tracer-bullet vertical slice — demoable on its own, sized for a single fresh context window. Work the frontier: any ticket whose blockers are all done. After ticket 02 lands, tickets 03/04/05 are all on the frontier and can proceed in parallel. Under time pressure, cut in spec §12 order: 07 first, then the alert scheduler (keep the manual trigger), then delete-last, then SMS credit parsing.
+**Authorities:** [Product Document](./xpensego-product-doc.md) · [PRD](./PRD.md) · [Technical Specification](./SPEC.md) · [Domain Context](./CONTEXT.md)
 
----
+**Status:** Replacement implementation has not started
 
-## 01 — Skeleton + ping-pong bot
+**Execution rule:** Complete phases in order except where a track is explicitly marked parallel. A phase closes only when its exit evidence is linked.
 
-**What to build:** a running Telegram bot that two different accounts can talk to independently, backed by the full database schema and reproducible tooling.
+This document owns implementation order, dependencies, work items, and phase evidence. It does not redefine product scope, behavioral requirements, or technical invariants from its authorities.
 
-**Blocked by:** None — can start immediately.
+## Working rules
 
-**Status:** ready-for-agent
+- Build production-shaped vertical slices through the OpenNext web application, Effect API Worker, Neon Postgres, and the Cloudflare primitive the slice actually needs.
+- Treat the [Technical Specification](./SPEC.md) and accepted ADRs as authoritative for runtime, data, reliability, provider, and security constraints; checklist wording cannot weaken them.
+- Treat deterministic tests, provider-backed acceptance, staging proof, and production verification as distinct evidence.
+- Maintain PRD requirement coverage beside implementation: each **[CORE]** requirement has an owning phase, automated evidence, and an end-to-end or release-gate result.
+- Do not extend the hackathon runtimes, mix WhatsApp rules into Telegram code, or build **[POST-SIGNAL]** and **[HOLD]** behavior before its gate.
 
-- [ ] uv project (`pyproject.toml` + committed lockfile); everything runs via `uv run`
-- [ ] Config loads bot token, OpenAI key, DB path, alert hour from environment
-- [ ] Full spec §4 schema migrates on startup, including `pending_entries` and the group-ready columns (`ledger_id`, `paid_by`)
-- [ ] Bot long-polls and answers "ping" → "pong"
-- [ ] Two different Telegram accounts get independent replies (M0 verification)
+## Phase 0 — Baseline and ownership
 
-## 02 — Agent loop + manual logging
+**Goal:** enter implementation with one coherent product and technical direction.
 
-**What to build:** a user types "chai 30, auto 80, lunch 250" or "spent 500 on groceries yesterday" (English or Hinglish) and gets one ✓ confirmation with the resolved date echoed; every model call is cost-logged; abusers hit static caps.
+- [x] Product scope, behavior, domain language, architecture, provider policy, and delivery order have distinct canonical documents and accepted ADRs.
+- [ ] Give every open product or technical decision an owner, decision deadline, and the phase it blocks.
+- [ ] Record owners and evidence locations for extraction quality, controlled-cohort load, security risk acceptance, recovery objectives, and WhatsApp availability thresholds.
 
-**Blocked by:** 01.
+**Exit gate:** the Product Document, PRD, Specification, Checklist, README, domain context, and accepted ADRs contain no hackathon-scope or target-platform contradiction; every unresolved decision has a dated owner.
 
-**Status:** ready-for-agent
+## Phase 1 — Minimal platform tracer
 
-- [ ] OpenAI Responses API tool loop (`strict` schemas, 8-iteration cap, one model: `gpt-5.4-nano`)
-- [ ] `log_entries` handles debits and credits; category validated against the 14 defaults
-- [ ] Multi-entry message → N rows, one consolidated ✓ confirmation with echoed dates
-- [ ] Relative dates resolve against today IST ("yesterday", "last friday", "3 tarikh ko")
-- [ ] Conversation context: last 10 messages loaded per turn, pruned past 7 days
-- [ ] Every OpenAI call writes a `cost_log` row (no exceptions)
-- [ ] Abuse caps: 30 turns/hour and 150/day → static reply with zero LLM calls; 4,000-char input truncation; `BOT_PAUSED` kill switch
-- [ ] Tone contract holds: one-line ✓, number-first, ≤1 clarifying question ("auto" alone asks for the amount)
+**Goal:** prove the replacement stack with the smallest reproducible path before product feature work.
 
-## 03 — SMS paste pipeline
+**Blocked by:** Phase 0.
 
-**What to build:** the demo centerpiece — a user pastes 1–50 bank/UPI SMS and gets a compact summary (count, total, top 3 categories, numbered entry list) with at most one question; duplicates are held for confirmation, never silently inserted or dropped; taught payees are never asked about again.
+**PRD coverage:** technical foundation for all **[CORE]** requirements.
 
-**Blocked by:** 02.
+- [ ] Create the TypeScript workspace with `apps/web`, `apps/api`, and shared `domain`, `adapters`, `contracts`, `config`, and `testing` packages.
+- [ ] Pin the runtime, package manager, Next.js, OpenNext, Effect, Wrangler, database, migration, test, and build-tool versions.
+- [ ] Enable strict TypeScript, formatting, linting, unit tests, production builds, secret scanning, dependency auditing, and the same checks in CI.
+- [ ] Define the Effect boundary: versioned schemas, typed errors, services and Layers, redacted configuration, bounded retries and timeouts, telemetry, deterministic test Layers, and one execution boundary per Worker entrypoint.
+- [ ] Configure local, development, and staging environments with typed Cloudflare bindings, an explicit compatibility date, validated defaults, and secret bindings.
+- [ ] Deploy a minimal OpenNext application and prove Server Components plus an explicitly dynamic authenticated route in a local production-runtime preview and deployed staging.
+- [ ] Select Workers-compatible authentication, PostgreSQL driver or query layer, and migration tooling.
+- [ ] Provide reproducible local PostgreSQL plus separate Neon development and staging projects, direct non-pooler Hyperdrive endpoints, and distinct least-privilege runtime and migration roles.
+- [ ] Before any database proof, write and apply the minimal ownership, idempotency, inbound-event, and outbox schema; prove forward migration from an empty database locally and in CI.
+- [ ] Disable query caching on every initial Hyperdrive binding and test that one user's data cannot be returned in another authorization context.
+- [ ] Deploy a minimal API Worker whose `fetch` and `queue` entrypoints run Effect programs through the controlled boundary.
+- [ ] From staging, prove a real PostgreSQL transaction, uniqueness constraint, concurrent idempotency case, scale-to-zero wake-up, and bounded reconnect behavior through Hyperdrive.
+- [ ] Prove one transaction → outbox → Queue → duplicate-safe consumer path, including failed publication recovery through an idempotent dispatcher and a retry or dead-letter recovery path.
+- [ ] Establish baseline structured logs, correlation and job IDs, safe error reporting, request/job metrics, and Cloudflare usage visibility without financial contents.
 
-**Status:** ready-for-agent
+**Exit gate:** a clean clone installs, migrates, type-checks, tests, and builds without production credentials; staging proves OpenNext SSR, the Effect `fetch`/`queue` boundary, uncached Neon access through Hyperdrive, concurrent idempotency, and one recoverable outbox/Queue path.
 
-- [ ] Deterministic split (blank lines + bank-header patterns), then per-SMS extraction calls in parallel; multi-amount chunk falls back to array extraction; failed extraction retries once alone
-- [ ] Appendix B corpus: ≥19/20 parsed with correct amount, date, and debit/credit; Blinkit→Groceries and Zomato→Food & Dining
-- [ ] Raw SMS text preserved on every parsed row
-- [ ] Dedup match → row held in `pending_entries`; "log it" → `resolve_pending` inserts verbatim (server copies fields, model transcribes nothing); "skip" discards; pending rows expire after 24h or on next paste
-- [ ] Unknown person-payee inserts immediately as Other, one question asked; the answer recategorizes the entry and teaches payee memory; second transfer to that payee logs silently
-- [ ] Credits in SMS (salary, refund) parse as credits
-- [ ] Numbered-reply correction works: "2 is groceries" fixes entry 2 from the last summary
+## Phase 2 — Complete identity and Telegram-to-ledger slice
 
-## 04 — Structured queries
+**Goal:** an authenticated user can create transactions through web and Telegram, then correct, remove, and restore them on the web without duplicate or cross-user effects.
 
-**What to build:** any of the seven money-question classes gets a number-first, one-line answer; the model fills query slots and never writes SQL; one user can never see another's data.
+**Blocked by:** Phase 1.
 
-**Blocked by:** 02.
+**PRD coverage:** FR-1, FR-3, FR-7, FR-9, FR-10, and the first complete slice of FR-17, FR-18, and FR-20.
 
-**Status:** ready-for-agent
+### Identity and ledger prerequisites
 
-- [ ] `query_ledger` structured tool with metric/type/category/description/date-range/compare-range/group-by slots; ledger scope and soft-delete filter injected server-side on every query
-- [ ] All 7 FR-9 classes answer correctly on seeded data: totals, comparisons, superlatives, listings, rates, credits-only, merchant substring ("how much at blinkit")
-- [ ] Spend answers count debits only; credits appear only when asked
-- [ ] Every answer leads with the number
-- [ ] Isolation check: user B's totals are ₹0 after user A logs (QA #26)
-- [ ] Inexpressible question → graceful "can't answer that yet", no heroics
+- [ ] Implement the approved signup, sign-in, sign-out, session validation, and account-recovery policy.
+- [ ] Create one personal ledger with a non-null `owner_user_id` per user and enforce that ownership relationship with a unique constraint.
+- [ ] Seed stable initial category identifiers before the first transaction is written.
+- [ ] Capture a user timezone during onboarding, apply a documented default, and let the user change it.
+- [ ] Implement expiring one-use verification for Telegram linking and unlinking plus visible link state and safe relinking.
+- [ ] Test channel-identity uniqueness, challenge replay, unlinking, relinking, session expiry, and two-user isolation.
 
-## 05 — Budgets + alerts + manual trigger
+### Telegram ingress and durable replies
 
-**What to build:** "food budget 5000" sets a monthly limit; crossing 80% or 100% of it produces exactly one proactive ⚠️ warning per threshold per month; a local admin endpoint fires the check on demand for the on-stage demo.
+- [ ] Register the staging webhook and verify its configured secret before expensive parsing.
+- [ ] Decode supported text updates at the boundary; reject oversized, unsupported, and unsafe group-chat operations without exposing personal data.
+- [ ] Persist and deduplicate `update_id`, then write the inbound event and dispatch outbox record in one PostgreSQL transaction before acknowledgement.
+- [ ] Queue and normalize the event through the shared channel contract, resolve identity server-side, and enforce per-identity and system-wide abuse limits.
+- [ ] Persist each reply intent and delivery outbox record before sending; record attempt, platform acceptance, failure, and outcome-unknown separately.
+- [ ] Reconcile ambiguous Telegram outcomes when provider evidence exists; otherwise suppress blind duplicate sends and expose bounded operator recovery.
 
-**Blocked by:** 02.
+### Manual capture and ledger control
 
-**Status:** ready-for-agent
+- [ ] Select a Workers-compatible model provider and routing policy before provider-backed parsing; keep the deterministic Model Gateway adapter usable in tests and local development.
+- [ ] Implement debit and credit creation from both a web form and ordinary-language Telegram messages.
+- [ ] Support one or multiple transactions, one focused missing-amount clarification, English and Hinglish fixtures, and relative dates resolved in the user's timezone.
+- [ ] Store each monetary value as a positive integer minor-unit `BIGINT` with an ISO 4217 currency and explicit `debit | credit` direction; prohibit floating-point and signed-amount representations.
+- [ ] Enforce valid category identifiers, immutable source records, initiating identity, and audit events.
+- [ ] Echo amount, direction, category, and resolved date in confirmations.
+- [ ] Implement authenticated ledger list, search, date/category/direction/source/counterparty filters, detail, correction, revision history, soft delete, and undo on web.
+- [ ] Use stable cursor pagination for mutable ledger lists and exclude soft-deleted transactions from normal reads.
+- [ ] Record activation, request outcome, model usage, and cost without copying financial contents into analytics.
+- [ ] Test malformed input, webhook and Queue duplicates, outbox recovery, concurrent creation, ambiguous send outcomes, corrections, deletion/undo, stable pagination, and cross-user access.
 
-- [ ] `manage_budget` set/list; list shows current-month debit spend vs limit with percentage
-- [ ] Daily scheduled check at 20:00 IST computes month-to-date debits per budgeted category
-- [ ] ⚠️ alert at ≥80% and ≥100% with days-left; `alerts_sent` ledger guarantees once per category/threshold/month
-- [ ] Manual trigger endpoint (localhost only) runs the same check immediately; second trigger sends nothing (M4 verification)
-- [ ] Scheduler is cuttable; the manual trigger is not
+**Exit gate:** web signup → Telegram link → ordinary-language transaction → durable Telegram reply → web ledger passes in staging; web manual creation, correction, soft delete, and undo also pass, including duplicate delivery and two-user isolation tests.
 
-## 06 — Onboarding + corrections + deletion + purge
+## Track 3A — Imports, categorization, and review
 
-**What to build:** a fresh account's `/start` proves the product in under 30 seconds via a dry-run sample SMS that never touches the ledger; corrections stick; "delete that" works; "delete everything about me" purges after one confirmation.
+**Goal:** pasted messages and CSV files become traceable, correctable ledger data without silent loss.
 
-**Blocked by:** 02, 03 (sample dry run reuses the parse pipeline).
+**Blocked by:** Phase 2. May run in parallel with Tracks 3B and 3C.
 
-**Status:** ready-for-agent
+**PRD coverage:** FR-4 through FR-9 and the import/review portions of FR-17, FR-18, and FR-20.
 
-- [ ] `/start` → three fixed (hardcoded) messages; sample SMS carries reserved UPI ref `000000424242`
-- [ ] Sample paste runs real extraction + categorization and shows the real ✓, but inserts nothing
-- [ ] `onboarded_at` set on first real entry (activation event instrumented)
-- [ ] "no, that's groceries" → `recategorize_entry` updates the last entry and payee memory where a payee is involved; persists across turns (QA #23)
-- [ ] "why did you categorize this as X?" → stored raw input + reasoning in two lines
-- [ ] "delete that" → soft-delete newest live entry, one-line confirm, excluded from all queries
-- [ ] "delete everything about me" → exactly one confirmation question → hard-delete across all user tables; `cost_log` anonymized, not deleted (QA #25)
-- [ ] Off-topic message → one brief sentence + steer back (QA #27)
+### Controlled upload and durable import
 
-## 07 — CSV statement upload
+- [ ] Approve file-size, row-count, content-type, scanning, quarantine, retention, and rejection policies before accepting files.
+- [ ] Provision staging R2 and prove upload, checksum, ownership metadata, quarantine, retrieval, expiry, and deletion.
+- [ ] Implement one controlled intake capability used by web uploads and authenticated Telegram document retrieval; acknowledge Telegram before asynchronous media retrieval, then determine type from content and scan before parsing.
+- [ ] Persist imports, immutable source records, review items, object lifecycle, idempotency, progress, and terminal status in PostgreSQL.
+- [ ] Accept pasted transaction messages from web and Telegram through the same idempotent import service; allow simple Telegram review decisions and deep-link complex or bulk review to web.
+- [ ] Process imports through a bounded, duplicate-safe Queue pipeline with typed retry, dead-letter, cancellation, and operator recovery.
+- [ ] Show progress, inserted/review/duplicate/failed counts, and terminal CSV status on web and Telegram.
 
-**What to build:** a user sends a CSV bank statement as a document and gets the same parse summary as an SMS paste; a malformed CSV gets one graceful question instead of an error.
+### Extraction, categorization, and review
 
-**Blocked by:** 03.
+- [ ] Move the reviewed bank/UPI corpus into the versioned testing package and add adversarial amount, direction, date, duplicate, encoding, locale, quoting, formula-injection, and mixed-validity fixtures.
+- [ ] Implement deterministic extraction where reliable and model-assisted extraction behind the Model Gateway where needed.
+- [ ] Apply user rule → deterministic mapping → model suggestion precedence and record parser, prompt, schema, rule, and model versions.
+- [ ] Record provider request identifiers, cost, and outcome-unknown model attempts; reconcile usage where supported without duplicating accepted domain mutations.
+- [ ] Preview ambiguous CSV column mappings before commit and preserve each exact source row; keep valid rows while routing unsupported, low-confidence, malformed, and likely duplicate records to visible review.
+- [ ] Neutralize spreadsheet formulas in previews and generated exports.
+- [ ] Implement accept, edit, merge, skip, retry, bulk acceptance, bulk category correction, and create/inspect/edit/disable/delete for user categorization rules.
+- [ ] Explain the preserved source, applied rule or model version, and confidence where available.
+- [ ] Preserve reversible correction history, stable pagination for mutable review lists, and strict per-user rule isolation.
+- [ ] Publish field-level extraction and categorization results by source format, counterparty, and model/rule version; expose “Other” share and meet the approved numeric thresholds and zero-silent-invention rules.
 
-**Status:** ready-for-agent — first to cut under time pressure
+**Exit gate:** web and Telegram CSV/paste → controlled intake → import → review → correction rule → repeat import passes in staging, with no silent record loss and approved field-level quality evidence.
 
-- [ ] Document download → same pipeline from categorization onward, source marked as statement
-- [ ] Date/amount/description columns auto-detected from header; undetectable → one question
-- [ ] Caps enforced: 500 rows / 1 MB
-- [ ] Dedup and pending behavior identical to SMS path
+## Track 3B — Structured questions and web insights
 
-## 08 — Demo seed + QA + rehearsal
+**Goal:** Telegram and web return deterministic, correctly scoped answers from the same ledger.
 
-**What to build:** the full on-stage demo (paste → categorized summary → query → budget alert) runs end-to-end twice without intervention on the demo laptop, against seeded data, with the QA set green.
+**Blocked by:** Phase 2. May run in parallel with Tracks 3A and 3C; only the budget-status adapter waits for Track 3C.
 
-**Blocked by:** 02, 03, 04, 05, 06 (07 optional).
+**PRD coverage:** FR-13 and the query portions of FR-17, FR-18, and FR-20.
 
-**Status:** ready-for-agent
+- [ ] Implement versioned structured query requests for totals, comparisons, maxima, listings, averages, credits, counterparties, categories, and budget status.
+- [ ] Interpret ordinary-language Telegram and web questions into supported query slots through the bounded Conversation and Model Gateway seams.
+- [ ] Inject user and ledger scope from authenticated context; prohibit executable model-written database queries.
+- [ ] Return calculation dates, direction, filters, and ledger context with deterministic results; disclose partial-ledger limits without financial-advice framing.
+- [ ] Render concise number-first Telegram answers and web insight views through the same Query interface.
+- [ ] Return bounded unsupported and ambiguous responses rather than fabricated answers.
+- [ ] Add English, Hinglish, follow-up, adversarial, credit, date-boundary, soft-delete, stable-pagination, and two-user fixtures.
+- [ ] Record query class, outcome, latency, model usage, and cost without question contents in product analytics.
 
-- [ ] Demo seeder creates the rehearsal user and data
-- [ ] Automatable Appendix A cases pass as tests (manual-log set, 7 query classes, correction/deletion/purge/isolation flows)
-- [ ] 20-SMS demo paste block parses live; duplicate SMS #8 held and resolved on stage
-- [ ] Budget alert fires on stage via the manual trigger
-- [ ] Full demo script runs twice, no intervention, on the same machine that will present
+**Exit gate:** every supported query class, including budget status after Track 3C, passes deterministic module tests and Telegram/web staging tests against the same seeded ledger.
+
+## Track 3C — Budgets, consent, alerts, and delivery
+
+**Goal:** proactive value is consented, private, idempotent, and recoverable.
+
+**Blocked by:** Phase 2. May run in parallel with Tracks 3A and 3B.
+
+**PRD coverage:** FR-2, FR-15, FR-16, and the budget/notification portions of FR-17, FR-18, FR-20, and FR-21.
+
+- [ ] Implement create, change, list, and remove for monthly category budgets using live debits and the user's timezone; show spent, remaining, percentage used, and days remaining on web and messaging.
+- [ ] Record consent purpose, source, and time; keep budget alerts, summaries, product announcements, and future recurring alerts independently controllable from transactional use.
+- [ ] Implement per-channel preference, immediate opt-out, and detailed versus privacy-preserving previews.
+- [ ] Provision a staging Cron Trigger that only enqueues idempotent budget-evaluation work.
+- [ ] Create at most one durable outbound intent for each 80% and 100% threshold crossing per budget and month, then dispatch it through the shared outbox/Queue path.
+- [ ] Keep selection, attempt, platform acceptance, delivery, failure, suppression, and outcome-unknown states distinct.
+- [ ] Reconcile ambiguous provider outcomes where supported and prevent blind duplicate successful sends.
+- [ ] Provide budget and delivery history on web and independent kill switches for model work and proactive notifications.
+- [ ] Test month rollover, timezone boundaries, soft deletion, credits, concurrent schedulers, Queue retry, opt-out, privacy mode, ambiguous provider outcomes, and duplicate suppression.
+
+**Exit gate:** a staged budget crosses both thresholds, delivers each at most once, survives a forced Queue/provider failure, handles an ambiguous outcome safely, and stops selection immediately after opt-out.
+
+## Phase 4 — Export, permanent deletion, and trust completion
+
+**Goal:** users can retrieve and permanently remove their data without operator intervention.
+
+**Blocked by:** Track 3A. Implementation may proceed while Tracks 3B and 3C finish; closure waits for their complete live-data inventory.
+
+**PRD coverage:** FR-11, FR-12, and the data-rights/operator portions of FR-17, FR-20, and FR-21.
+
+- [ ] Approve retention and deletion rules for sources, conversations, imports, exports, jobs, audit events, provider data, and backups.
+- [ ] Implement authenticated asynchronous export through Queue workers with transactions, source type, categories, corrections, and timestamps; store generated objects in R2, publish the machine-readable format, and use expiring authorized downloads.
+- [ ] Require recent authentication and short-lived server-side confirmation for permanent deletion.
+- [ ] Provision a staging Cloudflare Workflow for ordered, checkpointed, idempotent deletion and prove resume after a failed step without duplicate mutation.
+- [ ] Delete or irreversibly anonymize owned database records, R2 objects, job payloads, conversations, exports, and provider-held data as documented.
+- [ ] Retain only content-minimized deletion evidence and report completion or actionable failure to the user.
+- [ ] Publish a privacy notice matching actual providers and behavior.
+- [ ] Test interrupted export/deletion, retry, expiry, provider-cleanup ambiguity, object cleanup, and completion reporting.
+
+**Exit gate:** export and permanent deletion pass end to end in staging; a failed Workflow resumes safely and the completed Tracks 3A–3C data inventory proves that every owned live-data location follows the documented lifecycle.
+
+## Phase 5 — External-user invite readiness
+
+**Goal:** prove that the complete core product can safely accept real financial data from external users.
+
+**Blocked by:** Tracks 3A–3C and Phase 4.
+
+**PRD coverage:** completion evidence for FR-1 through FR-13, FR-15 through FR-18, FR-20, FR-21, all non-functional requirements, and the core release gate.
+
+### Production, recovery, and operations
+
+- [ ] Recheck current Cloudflare, Neon, OpenNext, Effect, Telegram, model, and authentication documentation, limits, pricing, and runtime compatibility.
+- [ ] Provision isolated production Workers, Hyperdrive, Queues, Workflow, Cron, R2, secrets, and configuration with least-privilege bindings.
+- [ ] Select the measured production region and a paid Neon plan whose restore window and support satisfy approved recovery-point and recovery-time objectives.
+- [ ] Keep production runtime and migration roles distinct, migration credentials outside Workers, and query caching disabled on every production Hyperdrive binding.
+- [ ] Prove encrypted backup creation, key ownership, access control, retention, restoration, and deletion; verify that restored data still follows the documented account-deletion lifecycle.
+- [ ] Review migrations with a deployment and forward-recovery procedure and complete a production-shaped migration rehearsal.
+- [ ] Measure Worker CPU and subrequests, Queue throughput and age, Workflow and R2 use, database wake/query behavior, and expected bursts; choose or upgrade the Cloudflare plan with documented headroom and alerts.
+- [ ] Complete dashboards, alerts, and runbooks for requests, jobs, unknown provider outcomes, imports, delivery, model cost, platform capacity, backup/restore, incidents, and both kill switches.
+- [ ] Keep sensitive support access disabled by default; if enabled, require approved purpose, least privilege, automatic expiry, and a content-minimized audit trail, then test grant, expiry, and revocation.
+
+### Measurable release evidence
+
+- [ ] Approve the controlled-cohort load profile and percentiles, then demonstrate every [PRD UX latency budget](./PRD.md#ux-latency-budgets), measuring webhook transport acknowledgement separately.
+- [ ] Pass automated accessibility checks with no serious or critical violations and manual keyboard, focus, label, contrast, and error-announcement checks on core flows against WCAG 2.2 AA.
+- [ ] Verify onboarding, ledger review, imports, correction, budgets, export, and deletion on supported mobile-width browsers.
+- [ ] Complete a threat model, authorization matrix, webhook/upload/CSRF review, dependency and secret scans, and cross-user destructive-flow tests with no unaccepted critical or high finding.
+- [ ] Meet the approved extraction/categorization thresholds and zero-silent-invention rules on the versioned release corpus.
+- [ ] Pass the complete web/Telegram regression suite, local production-runtime previews, provider-backed acceptance, staging end-to-end suite, and synthetic production smoke tests.
+- [ ] Link every **[CORE]** PRD requirement to its implementation, automated tests, operational signal, and release evidence; unproven coverage blocks invitations.
+- [ ] Verify analytics for activation, time-to-value, imports, review, corrections, rules, queries, budgets, alerts, retention, provider outcomes, and cost without financial contents.
+- [ ] Before invitations, lock the controlled-cohort observation window, minimum interview count, product-quality thresholds, safety stop conditions, and written continue/narrow/pivot/stop criteria.
+
+**Exit gate:** the [Product Document's invite-readiness gate](./xpensego-product-doc.md#invite-readiness-gate) passes with linked evidence for every Phase 5 task. No external user's real financial data is accepted before this gate.
+
+## Phase 6 — Controlled cohort validation
+
+**Goal:** learn from the initial controlled cohort without expanding product scope.
+
+**Blocked by:** Phase 5.
+
+- [ ] Run the [initial controlled cohort defined by the Product Document](./xpensego-product-doc.md#initial-controlled-cohort-outcome), including its approved size and onboarding-completion threshold.
+- [ ] Review support feedback, security/privacy incidents, import quality, unknown provider outcomes, and operational health at least weekly.
+- [ ] Collect and evidence every activation, quality, usage, retention, and cost signal owned by the controlled-cohort gate.
+- [ ] Conduct structured interviews about ledger trust, categorization quality, retention behavior, and willingness to pay.
+- [ ] Write a continue, narrow, pivot toward small business, or stop decision before WhatsApp or post-signal implementation starts.
+
+**Exit gate:** the [Product Document's controlled-cohort outcome](./xpensego-product-doc.md#initial-controlled-cohort-outcome) is recorded. Only its explicit **continue** decision may start WhatsApp.
+
+## Phase 7 — Broader business-signal gate
+
+**Goal:** determine whether the consumer thesis earns broader investment.
+
+**Blocked by:** Phase 6 decision to continue. May run in parallel with WhatsApp implementation.
+
+- [ ] Before expanding measurement, lock the terms required by the [Product Document's business-signal gate](./xpensego-product-doc.md#business-signal-gate).
+- [ ] Collect and evidence every adoption, retention, interview, and cost signal defined by that gate.
+- [ ] Apply the Product Document's stop condition without relabelling a missed threshold as success.
+- [ ] Reconfirm support burden, channel economics, and a testable pricing/entitlement hypothesis.
+- [ ] Record a written go/no-go decision for monetization experiments and each post-signal product brief.
+
+**Exit gate:** the [Product Document's business-signal gate](./xpensego-product-doc.md#business-signal-gate) has a recorded decision, with every missed threshold left visible in the evidence.
+
+## Phase 8 — WhatsApp channel
+
+**Goal:** add WhatsApp through the existing product seams without duplicating ledger, import, query, or notification behavior.
+
+**Blocked by:** the written Phase 6 **continue** decision. May run in parallel with Phase 7; public availability remains independently gated.
+
+**PRD coverage:** FR-19.
+
+- [ ] Before implementation, approve measurable WhatsApp availability thresholds for onboarding completion, delivery reliability, opt-out, template quality, support load, and cost.
+- [ ] Complete Meta Business Platform production onboarding and secure the business phone number and credentials.
+- [ ] Implement webhook verification/signature validation and normalize inbound messages plus status events through the channel seam.
+- [ ] Persist and deduplicate event/message identifiers and reuse the existing link, unlink, and relink flows.
+- [ ] Retrieve media with authentication and pass it through the common controlled-upload and storage capability.
+- [ ] Track customer-service windows and enforce approved template, consent, category, and eligibility rules for proactive messages.
+- [ ] Record template category, attempt, platform acceptance, delivery/read state, quality signals, cost, and outcome-unknown.
+- [ ] Reconcile ambiguous provider outcomes using Meta identifiers/status when available and prevent unsafe duplicate sends.
+- [ ] Support detailed and privacy-preserving templates using shared notification preferences.
+- [ ] Add fixtures, contract tests, provider-backed acceptance, staging end-to-end tests, and a limited WhatsApp cohort.
+
+**Exit gate:** WhatsApp users access the same authorized ledger and applicable core workflows as web and Telegram, and the approved window, template, consent, delivery, privacy, quality, support, and cost thresholds pass before public availability.
+
+## Roadmap guardrail
+
+The [Product Document's deferred scope](./xpensego-product-doc.md#8-explicitly-deferred), PRD **[POST-SIGNAL]**/**[HOLD]** registry, and [Feature Opportunity Map](./FEATURE-RESEARCH.md) govern all work beyond Phase 8. Any promoted capability requires its own approved brief, success metric, dependency review, and stop condition.

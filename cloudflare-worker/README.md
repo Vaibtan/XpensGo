@@ -1,13 +1,17 @@
-# Xpensego Cloudflare Worker
+# Legacy hackathon Cloudflare Worker
 
-This is the Cloudflare-native runtime replacing Python long polling, local SQLite, and APScheduler:
+> **Legacy — not the production foundation.** This D1-based Worker is a hackathon experiment preserved for behavioral reference only. Do not extend or deploy it as the replacement application. The current direction is documented in the [root README](../README.md), [Technical Specification](../SPEC.md), and [Delivery Checklist](../CHECKLIST.md).
+
+This experiment replaced Python long polling, local SQLite, and APScheduler during the hackathon:
 
 - `POST /telegram` is the Telegram webhook.
 - Cloudflare D1 is the ledger store.
 - The Cron Trigger invokes the daily alert check at 20:00 IST (`30 14 * * *` UTC).
 - Telegram sends are direct Bot API calls from the Worker.
 
-## One-time deployment
+## Historical deployment reference
+
+Do not run these commands against a production Cloudflare account. They remain only to explain how the hackathon artifact was operated.
 
 From this directory:
 
@@ -54,7 +58,7 @@ curl https://<worker-url>/health
 curl "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/getWebhookInfo"
 ```
 
-## Local development
+## Historical local development
 
 Use Wrangler's remote D1 mode only with non-production data:
 
@@ -64,6 +68,6 @@ npm run dev -- --remote
 
 For normal local development, create a local D1 database through Wrangler and use `npm run dev`.
 
-## Current worker scope
+## Hackathon worker scope
 
-The worker provides the Cloudflare transport, D1 schema, authenticated webhook, onboarding, basic manual expense/credit logging, budgets, and scheduled alerts. Advanced conversational tool-calling, bulk SMS/CSV parsing, payee teaching, corrections, and reports must be ported from the Python implementation before treating this as feature-parity production migration.
+The worker provides the old Cloudflare transport, D1 schema, authenticated webhook, onboarding, basic manual expense/credit logging, budgets, and scheduled alerts. It does not establish feature parity or production readiness. The replacement uses new OpenNext and Effect Worker projects, Neon PostgreSQL through Hyperdrive, and the reliability boundaries defined by the canonical specification.

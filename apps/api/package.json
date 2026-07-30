@@ -1,0 +1,28 @@
+{
+  "name": "@xpensego/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "wrangler deploy --dry-run --env=\"\" --outdir dist",
+    "deploy:staging": "wrangler deploy --env staging",
+    "dev": "wrangler dev",
+    "test": "vitest run",
+    "typecheck": "npm run types && tsc --noEmit",
+    "types": "wrangler types --env-interface CloudflareBindings"
+  },
+  "dependencies": {
+    "@xpensego/adapters": "0.1.0",
+    "@xpensego/contracts": "0.1.0",
+    "@xpensego/domain": "0.1.0",
+    "effect": "3.22.1"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "0.19.1",
+    "@xpensego/config": "0.1.0",
+    "@xpensego/testing": "0.1.0",
+    "typescript": "6.0.3",
+    "vitest": "4.1.10",
+    "wrangler": "4.116.0"
+  }
+}

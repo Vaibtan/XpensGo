@@ -1,0 +1,13 @@
+{
+  "name": "@xpensego/config",
+  "version": "0.1.0",
+  "private": true,
+  "files": [
+    "*.json"
+  ],
+  "exports": {
+    "./typescript/base": "./typescript.base.json",
+    "./typescript/node": "./typescript.node.json",
+    "./typescript/worker": "./typescript.worker.json"
+  }
+}

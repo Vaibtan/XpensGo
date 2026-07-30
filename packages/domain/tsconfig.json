@@ -1,0 +1,7 @@
+{
+  "extends": "@xpensego/config/typescript/node",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "include": ["src/**/*.ts"]
+}

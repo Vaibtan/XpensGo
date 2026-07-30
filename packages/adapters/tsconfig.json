@@ -1,0 +1,7 @@
+{
+  "extends": "@xpensego/config/typescript/worker",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "include": ["src/**/*.ts"]
+}

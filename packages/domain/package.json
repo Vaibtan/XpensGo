@@ -1,0 +1,26 @@
+{
+  "name": "@xpensego/domain",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./platform/read-platform-status": "./src/platform/read-platform-status.ts",
+    "./platform/runtime-config": "./src/platform/runtime-config.ts",
+    "./platform/runtime-telemetry": "./src/platform/runtime-telemetry.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@xpensego/contracts": "0.1.0",
+    "effect": "3.22.1"
+  },
+  "devDependencies": {
+    "@xpensego/config": "0.1.0",
+    "@xpensego/testing": "0.1.0",
+    "typescript": "6.0.3",
+    "vitest": "4.1.10"
+  }
+}

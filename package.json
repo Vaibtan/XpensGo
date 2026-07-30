@@ -1,12 +1,37 @@
 {
-  "name": "xpensego-waitlist",
+  "name": "xpensego",
+  "version": "0.1.0",
   "private": true,
-  "version": "1.0.0",
-  "scripts": {
-    "dev": "convex dev",
-    "deploy": "convex deploy"
+  "description": "Trustworthy personal finance capture and review across web and messaging surfaces.",
+  "packageManager": "npm@10.9.8",
+  "engines": {
+    "node": "22.23.1",
+    "npm": "10.9.8"
   },
-  "dependencies": {
-    "convex": "^1.17.0"
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "turbo run build --cache-dir=node_modules/.cache/turbo",
+    "build:cloudflare": "npm run build:cloudflare --workspace=@xpensego/web",
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm run test && npm run build && npm run build:cloudflare",
+    "dev": "turbo run dev --parallel --cache-dir=node_modules/.cache/turbo",
+    "format": "prettier --write apps packages package.json tsconfig.json turbo.json oxlint.json prettier.config.mjs",
+    "format:check": "prettier --check apps packages package.json tsconfig.json turbo.json oxlint.json prettier.config.mjs",
+    "lint": "oxlint --deny-warnings --type-aware --type-check apps packages",
+    "test": "turbo run test --cache-dir=node_modules/.cache/turbo",
+    "typecheck": "turbo run typecheck --cache-dir=node_modules/.cache/turbo",
+    "audit:dependencies": "npm audit --audit-level=high",
+    "types:api": "npm run types --workspace=@xpensego/api"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.1",
+    "oxlint": "1.76.0",
+    "oxlint-tsgolint": "7.0.2001",
+    "prettier": "3.9.6",
+    "turbo": "2.10.7",
+    "typescript": "6.0.3",
+    "vitest": "4.1.10"
   }
 }

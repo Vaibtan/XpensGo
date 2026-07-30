@@ -1,0 +1,25 @@
+{
+  "name": "@xpensego/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./platform/correlation-id": "./src/platform/correlation-id.ts",
+    "./platform/job-id": "./src/platform/job-id.ts",
+    "./platform/platform-status": "./src/platform/platform-status.ts",
+    "./platform/platform-status-job": "./src/platform/platform-status-job.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "effect": "3.22.1"
+  },
+  "devDependencies": {
+    "@xpensego/config": "0.1.0",
+    "typescript": "6.0.3",
+    "vitest": "4.1.10"
+  }
+}

@@ -27,7 +27,9 @@ When documents conflict, product intent in the Product Document governs the PRD,
 
 ## Current repository state
 
-The Python bot, local SQLite database, and existing Cloudflare Worker were hackathon experiments. They are useful as behavioral references and test fixtures but are not reused as the production runtime. The replacement is a new Cloudflare deployment with different application boundaries, persistence, reliability, and security guarantees. Legacy artifacts should remain intact until the replacement reproduces the intended behavior and any retained data has been audited.
+The replacement implementation has started under `apps/` and `packages/`. It currently contains the pinned Next.js/OpenNext web shell, an Effect-based API Worker with real `fetch` and Queue execution boundaries, versioned contracts, validated runtime configuration, content-minimized correlation/job telemetry, strict shared tooling, and Worker-runtime tests. Secret-backed configuration is intentionally deferred until the first operation that consumes it. Neon/Hyperdrive persistence, authentication, outbox recovery, Telegram behavior, and deployed staging evidence remain Phase 1 and Phase 2 work; the local tracer is not a user-ready product.
+
+The Python bot, local SQLite database, and original D1 Cloudflare Worker remain hackathon experiments. They are useful as behavioral references and test fixtures but are not reused as the production runtime. Legacy artifacts should remain intact until the replacement reproduces the intended behavior and any retained data has been audited.
 
 The waitlist site and its setup material are separate acquisition assets. The root `SETUP.md` and `XpensGo Waitlist/` directory apply to that waitlist, not to the new application runtime.
 

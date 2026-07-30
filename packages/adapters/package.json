@@ -1,0 +1,24 @@
+{
+  "name": "@xpensego/adapters",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./cloudflare/console-runtime-telemetry": "./src/cloudflare/console-runtime-telemetry.ts",
+    "./cloudflare/runtime-config": "./src/cloudflare/runtime-config.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@xpensego/domain": "0.1.0",
+    "effect": "3.22.1"
+  },
+  "devDependencies": {
+    "@xpensego/config": "0.1.0",
+    "typescript": "6.0.3",
+    "vitest": "4.1.10"
+  }
+}

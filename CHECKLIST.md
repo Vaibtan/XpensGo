@@ -2,7 +2,7 @@
 
 **Authorities:** [Product Document](./xpensego-product-doc.md) · [PRD](./PRD.md) · [Technical Specification](./SPEC.md) · [Domain Context](./CONTEXT.md)
 
-**Status:** Replacement implementation has not started
+**Status:** Phase 1 minimal platform tracer is in progress; the local TypeScript, Effect, Worker, and OpenNext foundation is implemented, while database and deployed staging proofs remain open.
 
 **Execution rule:** Complete phases in order except where a track is explicitly marked parallel. A phase closes only when its exit evidence is linked.
 
@@ -21,8 +21,24 @@ This document owns implementation order, dependencies, work items, and phase evi
 **Goal:** enter implementation with one coherent product and technical direction.
 
 - [x] Product scope, behavior, domain language, architecture, provider policy, and delivery order have distinct canonical documents and accepted ADRs.
-- [ ] Give every open product or technical decision an owner, decision deadline, and the phase it blocks.
-- [ ] Record owners and evidence locations for extraction quality, controlled-cohort load, security risk acceptance, recovery objectives, and WhatsApp availability thresholds.
+- [x] Give every open product or technical decision an owner, decision deadline, and the phase it blocks.
+- [x] Record owners and evidence locations for extraction quality, controlled-cohort load, security risk acceptance, recovery objectives, and WhatsApp availability thresholds.
+
+Decision ownership is role-based until named operators are added to the project:
+
+| Decision or evidence gate | Accountable owner | Decision deadline | Blocks | Evidence location |
+| --- | --- | --- | --- | --- |
+| API routing, contract generation, authentication, PostgreSQL query layer, and migration tooling | Technical lead | 2026-08-07 | Phase 1 exit and Phase 2 | [Specification §19](./SPEC.md#19-open-technical-decisions) and the Phase 1 evidence links below |
+| Model provider, model, and routing policy | Technical lead | 2026-08-14 | Phase 2 provider-backed parsing | Phase 2 evidence links |
+| Upload scanning and Queue-versus-Workflow boundaries for large imports and exports | Technical lead | 2026-08-21 | Tracks 3A and Phase 4 | Track 3A and Phase 4 evidence links |
+| Event analytics destination and content-minimized event contract | Product owner with technical lead | 2026-08-14 | Phase 2 analytics and Phase 5 readiness | Phase 2 and Phase 5 evidence links |
+| Retention durations and operator-tooling requirement | Product owner with security owner | 2026-08-28 | Phases 4 and 5 | Phase 4 and Phase 5 evidence links |
+| Extraction and categorization quality thresholds | Product owner with evaluation owner | 2026-08-21 | Track 3A exit and Phase 5 | Versioned evaluation report linked from Track 3A |
+| Controlled-cohort load profile and latency percentiles | Technical lead | 2026-09-04 | Phase 5 | Deployed-staging load report linked from Phase 5 |
+| Threat-model findings and security risk acceptance | Security owner, accountable to product owner | 2026-09-04 | External-user invitations | Threat model and acceptance record linked from Phase 5 |
+| Recovery objectives, Neon region/tier, backup retention, key ownership, and restore proof | Technical lead with security owner | 2026-09-04 | External-user invitations | Restore report linked from Phase 5 |
+| Cloudflare plan and measured capacity headroom | Technical lead | 2026-09-04 | External-user invitations | Capacity report linked from Phase 5 |
+| WhatsApp availability thresholds and Meta onboarding go/no-go | Product owner | Before Phase 8 starts, after the controlled-cohort decision | Phase 8 | Written cohort decision and Phase 8 evidence links |
 
 **Exit gate:** the Product Document, PRD, Specification, Checklist, README, domain context, and accepted ADRs contain no hackathon-scope or target-platform contradiction; every unresolved decision has a dated owner.
 
@@ -34,7 +50,7 @@ This document owns implementation order, dependencies, work items, and phase evi
 
 **PRD coverage:** technical foundation for all **[CORE]** requirements.
 
-- [ ] Create the TypeScript workspace with `apps/web`, `apps/api`, and shared `domain`, `adapters`, `contracts`, `config`, and `testing` packages.
+- [x] Create the TypeScript workspace with `apps/web`, `apps/api`, and shared `domain`, `adapters`, `contracts`, `config`, and `testing` packages.
 - [ ] Pin the runtime, package manager, Next.js, OpenNext, Effect, Wrangler, database, migration, test, and build-tool versions.
 - [ ] Enable strict TypeScript, formatting, linting, unit tests, production builds, secret scanning, dependency auditing, and the same checks in CI.
 - [ ] Define the Effect boundary: versioned schemas, typed errors, services and Layers, redacted configuration, bounded retries and timeouts, telemetry, deterministic test Layers, and one execution boundary per Worker entrypoint.
@@ -48,6 +64,13 @@ This document owns implementation order, dependencies, work items, and phase evi
 - [ ] From staging, prove a real PostgreSQL transaction, uniqueness constraint, concurrent idempotency case, scale-to-zero wake-up, and bounded reconnect behavior through Hyperdrive.
 - [ ] Prove one transaction → outbox → Queue → duplicate-safe consumer path, including failed publication recovery through an idempotent dispatcher and a retry or dead-letter recovery path.
 - [ ] Establish baseline structured logs, correlation and job IDs, safe error reporting, request/job metrics, and Cloudflare usage visibility without financial contents.
+
+**Current local evidence (2026-07-31):**
+
+- `npm run check` passes formatting, type-aware lint, strict type-checking, 11 behavioral tests, package declaration builds, an API Worker dry-run bundle, a Next.js production build, and an OpenNext Cloudflare bundle.
+- Worker-runtime tests exercise the real `fetch` and `queue` entrypoints with generated Cloudflare binding types. Contract tests reject excess internal fields and unsupported Queue versions; service tests use deterministic Layers and time.
+- `npm audit --audit-level=high` is enabled but currently reports 9 upstream findings (8 high, 1 moderate) in the pinned Next.js/OpenNext dependency tree. This keeps the CI/security portion of the tooling item open; forced downgrades or unverified transitive overrides are not accepted as remediation.
+- No deployed staging, Neon/Hyperdrive, external Queue, authentication, migration, outbox, or recovery claim is made by this evidence.
 
 **Exit gate:** a clean clone installs, migrates, type-checks, tests, and builds without production credentials; staging proves OpenNext SSR, the Effect `fetch`/`queue` boundary, uncached Neon access through Hyperdrive, concurrent idempotency, and one recoverable outbox/Queue path.
 

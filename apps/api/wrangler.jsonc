@@ -1,0 +1,55 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "xpensego-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-30",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "preview_urls": true,
+  "vars": {
+    "ENVIRONMENT": "development",
+    "SERVICE_NAME": "xpensego-api",
+  },
+  "queues": {
+    "consumers": [
+      {
+        "queue": "xpensego-platform-jobs-development",
+        "max_batch_size": 10,
+        "max_batch_timeout": 5,
+        "max_retries": 3,
+        "dead_letter_queue": "xpensego-platform-jobs-development-dlq",
+      },
+    ],
+  },
+  "observability": {
+    "enabled": true,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+    },
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 0.05,
+    },
+  },
+  "env": {
+    "staging": {
+      "name": "xpensego-api-staging",
+      "vars": {
+        "ENVIRONMENT": "staging",
+        "SERVICE_NAME": "xpensego-api",
+      },
+      "queues": {
+        "consumers": [
+          {
+            "queue": "xpensego-platform-jobs-staging",
+            "max_batch_size": 10,
+            "max_batch_timeout": 5,
+            "max_retries": 3,
+            "dead_letter_queue": "xpensego-platform-jobs-staging-dlq",
+          },
+        ],
+      },
+    },
+  },
+}

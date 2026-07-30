@@ -1,0 +1,17 @@
+.agents/
+.claude/
+.context/
+.open-next/
+.next/
+.playwright-mcp/
+.pytest_cache/
+.turbo/
+.venv/
+.wrangler/
+**/dist/
+**/worker-configuration.d.ts
+node_modules/
+package-lock.json
+uv.lock
+Xpensego Waitlist.html
+xpensego.db

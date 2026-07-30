@@ -1,0 +1,21 @@
+{
+  "name": "@xpensego/testing",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./platform/platform-fixtures": "./src/platform/platform-fixtures.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@xpensego/contracts": "0.1.0",
+    "effect": "3.22.1"
+  },
+  "devDependencies": {
+    "@xpensego/config": "0.1.0",
+    "typescript": "6.0.3"
+  }
+}

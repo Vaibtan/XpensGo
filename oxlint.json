@@ -1,0 +1,28 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "categories": {
+    "correctness": "error",
+    "perf": "warn",
+    "suspicious": "error"
+  },
+  "plugins": ["typescript", "unicorn"],
+  "rules": {
+    "no-console": "error",
+    "typescript/no-explicit-any": "error",
+    "typescript/no-floating-promises": "error",
+    "unicorn/no-process-exit": "off"
+  },
+  "ignorePatterns": [
+    ".agents/**",
+    ".claude/**",
+    ".context/**",
+    "**/.next/**",
+    "**/.open-next/**",
+    "**/dist/**",
+    ".playwright-mcp/**",
+    ".venv/**",
+    "apps/api/worker-configuration.d.ts",
+    "cloudflare-worker/**",
+    "XpensGo Waitlist/**"
+  ]
+}

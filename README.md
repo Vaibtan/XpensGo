@@ -27,7 +27,7 @@ When documents conflict, product intent in the Product Document governs the PRD,
 
 ## Current repository state
 
-The replacement implementation has started under `apps/` and `packages/`. It currently contains the pinned Next.js/OpenNext web shell, an Effect-based API Worker with real `fetch` and Queue execution boundaries, versioned contracts, validated runtime configuration, content-minimized correlation/job telemetry, strict shared tooling, and Worker-runtime tests. The PostgreSQL foundation adds forward-only Effect SQL migrations, separate migration and runtime roles, ownership constraints, inbound-event idempotency, a transactional outbox record, and real-database integration tests. Separate Neon development and staging projects, cache-disabled Hyperdrive bindings, Cloudflare Queues, and deployed API/OpenNext Workers are now provisioned; the deployed Hyperdrive data path, Queue publication and recovery, authentication, and Telegram behavior remain open. The current tracer is not a user-ready product.
+The replacement implementation has started under `apps/` and `packages/`. It currently contains the pinned Next.js/OpenNext web shell, an Effect-based API Worker with real `fetch`, Queue, and scheduled execution boundaries, versioned contracts, validated runtime configuration, content-minimized correlation/job telemetry, strict shared tooling, and Worker-runtime tests. The PostgreSQL foundation adds forward-only Effect SQL migrations, separate migration and runtime roles, ownership constraints, inbound-event idempotency, bounded outbox publication and stalled-consumer recovery, terminal operator retry, and duplicate-safe consumer receipts with real-database integration tests. Separate Neon development and staging projects, cache-disabled Hyperdrive bindings, Cloudflare Queues, and deployed API/OpenNext Workers are provisioned; applying outbox migrations 0002–0003 and proving the Hyperdrive-to-Queue path in staging, authentication, and Telegram behavior remain open. The current tracer is not a user-ready product.
 
 The Python bot, local SQLite database, and original D1 Cloudflare Worker remain hackathon experiments. They are useful as behavioral references and test fixtures but are not reused as the production runtime. Legacy artifacts should remain intact until the replacement reproduces the intended behavior and any retained data has been audited.
 
@@ -45,6 +45,8 @@ npm run test:integration
 ```
 
 `npm run db:down` stops the database without deleting its named volume. Application code connects as `xpensego_runtime`; migrations use the separate `xpensego_migrator` connection. Neon and Hyperdrive credentials are not required for this local proof. Managed development and staging resource ownership is documented in [`SETUP.md`](./SETUP.md).
+
+A publication that exhausts its bounded retry policy remains in a terminal database state for inspection. After resolving the underlying Queue or data issue, return exactly one message to the dispatcher with `npm run db:outbox:retry -- <outbox-message-id>`; managed environments require the separately secured direct `XPENSEGO_MIGRATION_DATABASE_URL` in the operator shell. Worker runtime credentials cannot invoke this recovery seam.
 
 ## Delivery order
 

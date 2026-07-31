@@ -3,12 +3,22 @@ import {
   InvalidRuntimeConfig,
   makeRuntimeConfigLayer,
 } from "@xpensego/adapters/cloudflare/runtime-config";
+import { makePostgresOutboxPersistenceLayer } from "@xpensego/adapters/postgres/outbox-store";
 import { CorrelationId } from "@xpensego/contracts/platform/correlation-id";
+import { OutboxJobV1 } from "@xpensego/contracts/platform/outbox-job";
 import { PlatformStatusJobV1 } from "@xpensego/contracts/platform/platform-status-job";
+import {
+  dispatchPendingOutbox,
+  recordOutboxConsumption,
+} from "@xpensego/domain/outbox/outbox-delivery";
 import { readPlatformStatus } from "@xpensego/domain/platform/read-platform-status";
 import type { RuntimeConfig } from "@xpensego/domain/platform/runtime-config";
 import { RuntimeTelemetry } from "@xpensego/domain/platform/runtime-telemetry";
-import { Effect, Either, Layer, Schema } from "effect";
+import { Effect, Layer, Redacted, Schema } from "effect";
+
+import { makeOutboxQueuePublicationLayer } from "./outbox-queue-publication.js";
+
+const PlatformQueueJobV1 = Schema.Union(PlatformStatusJobV1, OutboxJobV1);
 
 class InvalidCorrelationId extends Schema.TaggedError<InvalidCorrelationId>()(
   "InvalidCorrelationId",
@@ -22,15 +32,15 @@ class InvalidCorrelationId extends Schema.TaggedError<InvalidCorrelationId>()(
   }
 }
 
-class InvalidPlatformStatusJob extends Schema.TaggedError<InvalidPlatformStatusJob>()(
-  "InvalidPlatformStatusJob",
+class InvalidPlatformQueueJob extends Schema.TaggedError<InvalidPlatformQueueJob>()(
+  "InvalidPlatformQueueJob",
   {
     messageId: Schema.String,
   },
 ) {
   /** Safe explanation that excludes the rejected Queue body. */
   override get message(): string {
-    return `Queue message ${this.messageId} is not a supported platform status job.`;
+    return `Queue message ${this.messageId} is not a supported platform job.`;
   }
 }
 
@@ -88,6 +98,20 @@ function invocationLayer(
       serviceName: env.SERVICE_NAME,
     }),
     consoleRuntimeTelemetryLayer,
+  );
+}
+
+function queueInvocationLayer(env: CloudflareBindings) {
+  return Layer.merge(
+    invocationLayer(env),
+    makePostgresOutboxPersistenceLayer(Redacted.make(env.HYPERDRIVE.connectionString)),
+  );
+}
+
+function scheduledInvocationLayer(env: CloudflareBindings) {
+  return Layer.merge(
+    queueInvocationLayer(env),
+    makeOutboxQueuePublicationLayer(env.PLATFORM_JOBS_QUEUE),
   );
 }
 
@@ -160,48 +184,102 @@ function runFetch(request: Request, env: CloudflareBindings): Promise<Response> 
 const processQueueMessage = Effect.fn("Api.processQueueMessage")(function* (
   message: Message<unknown>,
 ) {
-  const decoded = yield* Schema.decodeUnknown(PlatformStatusJobV1)(message.body, {
+  const job = yield* Schema.decodeUnknown(PlatformQueueJobV1)(message.body, {
     onExcessProperty: "error",
-  }).pipe(
-    Effect.mapError(() => new InvalidPlatformStatusJob({ messageId: message.id })),
-    Effect.either,
-  );
+  }).pipe(Effect.mapError(() => new InvalidPlatformQueueJob({ messageId: message.id })));
 
-  if (Either.isLeft(decoded)) {
-    yield* Effect.sync(() => {
-      message.ack();
-      // oxlint-disable-next-line no-console -- Invalid Queue envelopes are terminal and recorded without their body.
-      console.error(
-        JSON.stringify({
-          event: "InvalidPlatformStatusJob",
-          errorTag: decoded.left._tag,
-          messageId: decoded.left.messageId,
-        }),
-      );
+  if (job.kind === "platform.status.requested") {
+    yield* readPlatformStatus({ correlationId: job.correlationId });
+    const telemetry = yield* RuntimeTelemetry;
+    yield* telemetry.emit({
+      _tag: "PlatformStatusJobProcessed",
+      correlationId: job.correlationId,
+      jobId: job.jobId,
+      outcome: "processed",
     });
     return;
   }
 
-  yield* readPlatformStatus({ correlationId: decoded.right.correlationId });
-  const telemetry = yield* RuntimeTelemetry;
-  yield* telemetry.emit({
-    _tag: "PlatformStatusJobProcessed",
-    correlationId: decoded.right.correlationId,
-    jobId: decoded.right.jobId,
-    outcome: "processed",
-  });
-  yield* Effect.sync(() => {
-    message.ack();
+  yield* recordOutboxConsumption({
+    outboxMessageId: job.outboxMessageId,
+    correlationId: job.correlationId,
   });
 });
 
+function queueRetryDelaySeconds(attempts: number): number {
+  return Math.min(30 * 2 ** Math.min(Math.max(attempts - 1, 0), 4), 300);
+}
+
+function processQueueMessageAtBoundary(message: Message<unknown>, queueName: string) {
+  return processQueueMessage(message).pipe(
+    Effect.tap(() =>
+      Effect.sync(() => {
+        message.ack();
+      }),
+    ),
+    Effect.catchTag("InvalidPlatformQueueJob", (error) =>
+      Effect.sync(() => {
+        message.ack();
+        // oxlint-disable-next-line no-console -- Invalid Queue envelopes are terminal and recorded without their body.
+        console.error(
+          JSON.stringify({
+            event: "InvalidPlatformQueueJob",
+            errorTag: error._tag,
+            messageId: error.messageId,
+            queue: queueName,
+          }),
+        );
+      }),
+    ),
+    Effect.catchTag("OutboxPersistenceUnavailable", (error) =>
+      Effect.sync(() => {
+        message.retry({ delaySeconds: queueRetryDelaySeconds(message.attempts) });
+        // oxlint-disable-next-line no-console -- Transient persistence failures are retried without Queue contents.
+        console.error(
+          JSON.stringify({
+            event: "OutboxQueueJobDeferred",
+            errorTag: error._tag,
+            messageId: message.id,
+            queue: queueName,
+            attempts: message.attempts,
+          }),
+        );
+      }),
+    ),
+    Effect.catchAllCause((cause) =>
+      Effect.sync(() => {
+        message.retry({ delaySeconds: queueRetryDelaySeconds(message.attempts) });
+        // oxlint-disable-next-line no-console -- Unexpected message failures retry only the affected Queue message.
+        console.error(
+          JSON.stringify({
+            event: "UnhandledQueueMessageFailure",
+            messageId: message.id,
+            queue: queueName,
+            attempts: message.attempts,
+            causeTag: cause._tag,
+          }),
+        );
+      }),
+    ),
+  );
+}
+
 function runQueue(batch: MessageBatch<unknown>, env: CloudflareBindings): Promise<void> {
-  const program = Effect.forEach(batch.messages, processQueueMessage, {
-    concurrency: 5,
-    discard: true,
-  }).pipe(
-    Effect.provide(invocationLayer(env)),
+  const program = Effect.forEach(
+    batch.messages,
+    (message) => processQueueMessageAtBoundary(message, batch.queue),
+    {
+      concurrency: 5,
+      discard: true,
+    },
+  ).pipe(
+    Effect.provide(queueInvocationLayer(env)),
     Effect.catchTag("InvalidRuntimeConfig", () =>
+      Effect.sync(() => {
+        batch.retryAll({ delaySeconds: 5 });
+      }),
+    ),
+    Effect.catchTag("OutboxPersistenceUnavailable", () =>
       Effect.sync(() => {
         batch.retryAll({ delaySeconds: 5 });
       }),
@@ -224,6 +302,37 @@ function runQueue(batch: MessageBatch<unknown>, env: CloudflareBindings): Promis
   return Effect.runPromise(program);
 }
 
+function runScheduled(env: CloudflareBindings): Promise<void> {
+  const program = dispatchPendingOutbox().pipe(
+    Effect.provide(scheduledInvocationLayer(env)),
+    Effect.asVoid,
+    Effect.catchAll((error) =>
+      Effect.sync(() => {
+        // oxlint-disable-next-line no-console -- Scheduled recovery logs only typed error tags.
+        console.error(
+          JSON.stringify({
+            event: "OutboxDispatchDeferred",
+            errorTag: error._tag,
+          }),
+        );
+      }),
+    ),
+    Effect.catchAllCause((cause) =>
+      Effect.sync(() => {
+        // oxlint-disable-next-line no-console -- Scheduled recovery logs no message or database contents.
+        console.error(
+          JSON.stringify({
+            event: "UnhandledOutboxDispatchFailure",
+            causeTag: cause._tag,
+          }),
+        );
+      }),
+    ),
+  );
+
+  return Effect.runPromise(program);
+}
+
 /** Cloudflare Worker entrypoints; each invocation executes exactly one Effect program. */
 export default {
   fetch(request, env, _context) {
@@ -231,5 +340,8 @@ export default {
   },
   queue(batch, env, _context) {
     return runQueue(batch, env);
+  },
+  scheduled(_controller, env, _context) {
+    return runScheduled(env);
   },
 } satisfies ExportedHandler<CloudflareBindings>;

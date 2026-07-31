@@ -6,6 +6,8 @@ import {
   getQueueResult,
 } from "cloudflare:test";
 import { platformFixtureIds } from "@xpensego/testing/platform/platform-fixtures";
+import { OutboxMessageId } from "@xpensego/contracts/platform/outbox-message-id";
+import { Schema } from "effect";
 import { describe, expect, it } from "vitest";
 
 import worker from "./index.js";
@@ -101,5 +103,37 @@ describe("Xpensego API Worker", () => {
     const result = await getQueueResult(batch, context);
     expect(result.ackAll).toBe(false);
     expect(result.explicitAcks).toEqual(["invalid-message", "valid-message"]);
+  });
+
+  it("retries the batch when its PostgreSQL persistence Layer is unavailable", async () => {
+    const batch = createMessageBatch("xpensego-platform-jobs-development", [
+      {
+        id: "unavailable-outbox-message",
+        timestamp: new Date("2026-07-31T00:00:00.000Z"),
+        attempts: 1,
+        body: {
+          version: 1,
+          kind: "outbox.message.ready",
+          outboxMessageId: Schema.decodeUnknownSync(OutboxMessageId)(
+            "98b2ea19-c24e-49a3-a808-f39667b3c32e",
+          ),
+          correlationId: platformFixtureIds.correlationId,
+        },
+      },
+    ]);
+    const context = createExecutionContext();
+    const unavailableDatabaseEnv: CloudflareBindings = {
+      ...env,
+      HYPERDRIVE: {
+        ...env.HYPERDRIVE,
+        connectionString: "postgresql://xpensego_runtime:unavailable@127.0.0.1:1/xpensego",
+      },
+    };
+
+    await worker.queue(batch, unavailableDatabaseEnv, context);
+
+    const result = await getQueueResult(batch, context);
+    expect(result.retryBatch).toEqual({ retry: true });
+    expect(result.explicitAcks).toEqual([]);
   });
 });

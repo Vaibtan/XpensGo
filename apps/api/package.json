@@ -8,6 +8,7 @@
     "deploy:staging": "wrangler deploy --env staging",
     "dev": "wrangler dev",
     "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
     "typecheck": "npm run types && tsc --noEmit",
     "types": "wrangler types --env-interface CloudflareBindings"
   },
@@ -18,6 +19,7 @@
     "effect": "3.22.1"
   },
   "devDependencies": {
+    "@effect/sql-pg": "0.53.0",
     "@cloudflare/vitest-pool-workers": "0.19.1",
     "@xpensego/config": "0.1.0",
     "@xpensego/testing": "0.1.0",

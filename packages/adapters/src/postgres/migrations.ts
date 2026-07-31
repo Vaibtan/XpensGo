@@ -3,10 +3,14 @@ import { PgClient } from "@effect/sql-pg";
 import { Effect, type Redacted } from "effect";
 
 import { foundationMigration } from "./migrations/0001-foundation.js";
+import { outboxDispatchMigration } from "./migrations/0002-outbox-dispatch.js";
+import { outboxRecoveryPolicyMigration } from "./migrations/0003-outbox-recovery-policy.js";
 
 const migrationProgram = Migrator.make({})({
   loader: Migrator.fromRecord({
     "0001_foundation": foundationMigration,
+    "0002_outbox_dispatch": outboxDispatchMigration,
+    "0003_outbox_recovery_policy": outboxRecoveryPolicyMigration,
   }),
   table: "xpensego_migrations",
 });

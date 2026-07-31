@@ -1,10 +1,10 @@
 import type { CorrelationId } from "@xpensego/contracts/platform/correlation-id";
+import type { OutboxMessageId } from "@xpensego/contracts/platform/outbox-message-id";
 import { Context, Effect, Schema } from "effect";
 
 import type { ExternalChannelEventId, InboundEventId, MessagingChannel } from "./inbound-event.js";
 import { UserId } from "../identity/user-id.js";
 import { LedgerId } from "../ledger/ledger-id.js";
-import type { OutboxMessageId } from "../outbox/outbox-message-id.js";
 
 const InboundEventIdempotencyKey = Schema.NonEmptyString.pipe(
   Schema.brand("InboundEventIdempotencyKey"),

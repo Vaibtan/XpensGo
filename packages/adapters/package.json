@@ -7,11 +7,14 @@
     "./cloudflare/console-runtime-telemetry": "./src/cloudflare/console-runtime-telemetry.ts",
     "./cloudflare/runtime-config": "./src/cloudflare/runtime-config.ts",
     "./postgres/inbound-event-store": "./src/postgres/inbound-event-store.ts",
-    "./postgres/migrations": "./src/postgres/migrations.ts"
+    "./postgres/isolated-test-database": "./src/postgres/isolated-test-database.ts",
+    "./postgres/migrations": "./src/postgres/migrations.ts",
+    "./postgres/outbox-store": "./src/postgres/outbox-store.ts"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "db:migrate": "tsx src/postgres/migrate.ts",
+    "db:outbox:retry": "tsx src/postgres/recover-outbox.ts",
     "test": "vitest run --config vitest.config.ts",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "typecheck": "tsc --noEmit"

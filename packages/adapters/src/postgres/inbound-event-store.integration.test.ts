@@ -8,7 +8,7 @@ import {
 import { ExternalChannelEventId, InboundEventId } from "@xpensego/domain/channel/inbound-event";
 import { UserId } from "@xpensego/domain/identity/user-id";
 import { LedgerId } from "@xpensego/domain/ledger/ledger-id";
-import { OutboxMessageId } from "@xpensego/domain/outbox/outbox-message-id";
+import { OutboxMessageId } from "@xpensego/contracts/platform/outbox-message-id";
 import { CorrelationId } from "@xpensego/contracts/platform/correlation-id";
 import { Effect, Schema } from "effect";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";

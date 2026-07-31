@@ -1,7 +1,7 @@
 import { Schema } from "effect";
 
-/** Identifier for a durable message waiting in the transactional outbox. */
+/** Identifier for one durable transactional-outbox message. */
 export const OutboxMessageId = Schema.UUID.pipe(Schema.brand("OutboxMessageId"));
 
-/** A durable transactional-outbox message identifier. */
+/** A parsed durable transactional-outbox message identifier. */
 export type OutboxMessageId = typeof OutboxMessageId.Type;

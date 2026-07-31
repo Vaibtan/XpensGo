@@ -8,7 +8,10 @@ const localTestRuntimeUrl =
   "postgresql://xpensego_runtime:xpensego_runtime_local_only@127.0.0.1:55432/postgres";
 
 type IsolatedTestDatabaseName =
-  "xpensego_inbound_store_integration" | "xpensego_migration_integration";
+  | "xpensego_inbound_store_integration"
+  | "xpensego_migration_integration"
+  | "xpensego_outbox_store_integration"
+  | "xpensego_worker_outbox_integration";
 
 function parseLoopbackTestUrl(rawUrl: string, variableName: string): URL {
   let databaseUrl: URL;

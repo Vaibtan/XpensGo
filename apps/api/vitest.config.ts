@@ -1,8 +1,8 @@
 import { cloudflareTest } from "@cloudflare/vitest-pool-workers";
-import { defineConfig } from "vitest/config";
+import { defineConfig, mergeConfig } from "vitest/config";
 
-/** Worker-runtime Vitest configuration for the API entrypoint tests. */
-export default defineConfig({
+/** Shared Worker runtime and dependency optimizer for API test suites. */
+export const workerVitestConfig = defineConfig({
   plugins: [
     cloudflareTest({
       wrangler: {
@@ -10,4 +10,38 @@ export default defineConfig({
       },
     }),
   ],
+  test: {
+    deps: {
+      optimizer: {
+        ssr: {
+          enabled: true,
+          include: ["pg"],
+          exclude: [
+            "crypto",
+            "dns",
+            "events",
+            "fs",
+            "net",
+            "path",
+            "stream",
+            "string_decoder",
+            "tls",
+            "util",
+            "util/types",
+          ],
+        },
+      },
+    },
+  },
 });
+
+/** Worker-runtime Vitest configuration for credential-free API tests. */
+export default mergeConfig(
+  workerVitestConfig,
+  defineConfig({
+    test: {
+      include: ["src/**/*.test.ts"],
+      exclude: ["src/**/*.integration.test.ts"],
+    },
+  }),
+);

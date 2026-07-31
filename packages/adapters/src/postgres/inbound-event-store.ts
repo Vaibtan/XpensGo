@@ -6,10 +6,10 @@ import {
   InboundEventStore,
   type PersistInboundEventInput,
 } from "@xpensego/domain/channel/accept-inbound-event";
+import { OutboxMessageId } from "@xpensego/contracts/platform/outbox-message-id";
 import { InboundEventId } from "@xpensego/domain/channel/inbound-event";
 import { UserId } from "@xpensego/domain/identity/user-id";
 import { LedgerId } from "@xpensego/domain/ledger/ledger-id";
-import { OutboxMessageId } from "@xpensego/domain/outbox/outbox-message-id";
 import { Effect, Layer, Schema, type Redacted } from "effect";
 
 const InsertedInboundEvent = Schema.Struct({

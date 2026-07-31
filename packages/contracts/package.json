@@ -6,6 +6,8 @@
   "exports": {
     "./platform/correlation-id": "./src/platform/correlation-id.ts",
     "./platform/job-id": "./src/platform/job-id.ts",
+    "./platform/outbox-job": "./src/platform/outbox-job.ts",
+    "./platform/outbox-message-id": "./src/platform/outbox-message-id.ts",
     "./platform/platform-status": "./src/platform/platform-status.ts",
     "./platform/platform-status-job": "./src/platform/platform-status-job.ts"
   },

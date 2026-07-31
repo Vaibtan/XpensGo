@@ -13,6 +13,8 @@ const make: RuntimeTelemetryService = RuntimeTelemetry.of({
           event: event._tag,
           correlationId: event.correlationId,
           ...("jobId" in event ? { jobId: event.jobId } : {}),
+          ...("outboxMessageId" in event ? { outboxMessageId: event.outboxMessageId } : {}),
+          ...("attempt" in event ? { attempt: event.attempt } : {}),
           outcome: event.outcome,
         }),
       );

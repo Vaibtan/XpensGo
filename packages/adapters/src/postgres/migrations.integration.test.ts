@@ -29,7 +29,11 @@ describe("PostgreSQL migrations", () => {
       const firstRun = await Effect.runPromise(runMigrations(testDatabase.migrationUrl));
       const secondRun = await Effect.runPromise(runMigrations(testDatabase.migrationUrl));
 
-      expect(firstRun).toEqual([[1, "foundation"]]);
+      expect(firstRun).toEqual([
+        [1, "foundation"],
+        [2, "outbox_dispatch"],
+        [3, "outbox_recovery_policy"],
+      ]);
       expect(secondRun).toEqual([]);
     });
   });
@@ -47,7 +51,10 @@ describe("PostgreSQL migrations", () => {
             readonly canDeleteUsers: boolean;
             readonly canInsertInboundEvents: boolean;
             readonly canInsertOutboxMessages: boolean;
+            readonly canInsertOutboxReceipts: boolean;
             readonly canInsertMigrations: boolean;
+            readonly canUpdateOutboxPayload: boolean;
+            readonly canUpdateOutboxStatus: boolean;
             readonly roleName: string;
           }>`
             SELECT
@@ -58,6 +65,12 @@ describe("PostgreSQL migrations", () => {
                 AS "canInsertInboundEvents",
               has_table_privilege(current_user, 'outbox_messages', 'INSERT')
                 AS "canInsertOutboxMessages",
+              has_column_privilege(current_user, 'outbox_messages', 'status', 'UPDATE')
+                AS "canUpdateOutboxStatus",
+              has_column_privilege(current_user, 'outbox_messages', 'payload', 'UPDATE')
+                AS "canUpdateOutboxPayload",
+              has_table_privilege(current_user, 'outbox_message_receipts', 'INSERT')
+                AS "canInsertOutboxReceipts",
               has_table_privilege(current_user, 'xpensego_migrations', 'INSERT')
                 AS "canInsertMigrations"
           `;
@@ -70,7 +83,10 @@ describe("PostgreSQL migrations", () => {
         canDeleteUsers: false,
         canInsertInboundEvents: true,
         canInsertOutboxMessages: true,
+        canInsertOutboxReceipts: true,
         canInsertMigrations: false,
+        canUpdateOutboxPayload: false,
+        canUpdateOutboxStatus: true,
       });
     });
   });

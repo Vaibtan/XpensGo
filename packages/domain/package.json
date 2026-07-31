@@ -4,6 +4,11 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./channel/accept-inbound-event": "./src/channel/accept-inbound-event.ts",
+    "./channel/inbound-event": "./src/channel/inbound-event.ts",
+    "./identity/user-id": "./src/identity/user-id.ts",
+    "./ledger/ledger-id": "./src/ledger/ledger-id.ts",
+    "./outbox/outbox-message-id": "./src/outbox/outbox-message-id.ts",
     "./platform/read-platform-status": "./src/platform/read-platform-status.ts",
     "./platform/runtime-config": "./src/platform/runtime-config.ts",
     "./platform/runtime-telemetry": "./src/platform/runtime-telemetry.ts"

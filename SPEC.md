@@ -1,6 +1,6 @@
-# Xpensego — Technical Specification v4.3
+# Xpensego — Technical Specification v4.4
 
-**Status:** Pre-implementation technical baseline
+**Status:** Active implementation baseline
 **Updated:** 31 July 2026
 **Product authority:** [Product Document](./xpensego-product-doc.md)
 **Behavioral authority:** [PRD](./PRD.md)
@@ -20,7 +20,7 @@ The existing Python bot, SQLite database, and Cloudflare Worker are hackathon ar
 2. **Next.js on Cloudflare Workers.** Next.js App Router provides the user-facing web surface and is deployed through the Cloudflare OpenNext adapter.
 3. **Effect application runtime.** Backend use cases are Effect programs. Cloudflare Worker entrypoints provide dependencies, execute programs, and translate typed outcomes to transport responses. NestJS is not used.
 4. **Cloudflare production platform.** Workers provide compute; Queues provide asynchronous delivery; Workflows provide durable multi-step execution; Cron Triggers initiate schedules; R2 stores controlled objects; Cloudflare secrets and observability support runtime operations.
-5. **Neon PostgreSQL authority.** Neon is the managed PostgreSQL provider and system of record for users, ledgers, transactions, imports, consent, delivery, audit, and usage. Workers reach application traffic through cache-disabled Hyperdrive configurations.
+5. **Neon PostgreSQL authority.** Neon is the managed PostgreSQL provider and system of record for users, ledgers, transactions, imports, consent, delivery, audit, and usage. Workers reach application traffic through cache-disabled Hyperdrive configurations. Application adapters use Effect SQL with `@effect/sql-pg` and its `pg` backend; schema changes use Effect SQL's forward-only migrator through a separate direct administrative connection, as recorded in [ADR 0003](./docs/adr/0003-effect-sql-postgres-migrations.md).
 6. **Shared messaging seam.** Telegram is the first adapter; later WhatsApp behavior reuses the same domain interfaces. The Product Document owns its release gate.
 7. **One product across surfaces.** Web and messaging surfaces use the same users, ledgers, domain rules, and audit history.
 8. **Asynchronous external work.** Imports, model work, exports, deletion, and notifications use Queues or Workflows rather than long-lived webhook requests.
@@ -401,7 +401,7 @@ Every table containing user-derived data has an explicit ownership or ledger rel
 
 ### Neon connection and environment policy
 
-- Application queries use `node-postgres` or Postgres.js through Hyperdrive. The exact driver and query layer are selected in Phase 1.
+- Application queries use Effect SQL with `@effect/sql-pg` and its `pg` backend through Hyperdrive. Migrations use Effect SQL's forward-only migrator over a separately secured direct connection; application modules depend on application-owned persistence ports rather than SQL APIs.
 - Hyperdrive is configured with a direct, non-pooler Neon endpoint. The Neon pooled endpoint and Neon serverless driver are not placed behind Hyperdrive.
 - Query caching is disabled on every initial Hyperdrive configuration. Authentication, authorization, ledger, budget, import, idempotency, notification, and read-after-write queries require fresh results. A cached binding may be added later only for a named stale-tolerant read with explicit tests and freshness semantics.
 - A database client is created inside each `fetch`, `queue`, scheduled, or Workflow invocation. Driver pools and connected clients are never retained in Worker global scope.
@@ -717,7 +717,6 @@ The [Delivery Checklist](./CHECKLIST.md) exclusively owns milestones, dependenci
 
 ## 19. Open technical decisions
 
-- ORM and migration tool.
 - Authentication and account-recovery provider.
 - Neon production region after latency and data-location review.
 - Exact paid Neon tier and any independent backup required to meet the selected recovery objectives.

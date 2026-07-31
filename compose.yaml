@@ -1,0 +1,23 @@
+name: xpensego-local
+
+services:
+  postgres:
+    image: postgres:17.10-alpine3.23
+    environment:
+      POSTGRES_DB: xpensego
+      POSTGRES_USER: xpensego_migrator
+      POSTGRES_PASSWORD: xpensego_migration_local_only
+      XPENSEGO_RUNTIME_PASSWORD: xpensego_runtime_local_only
+    ports:
+      - "127.0.0.1:55432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - xpensego-postgres-data:/var/lib/postgresql/data
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
+
+volumes:
+  xpensego-postgres-data:

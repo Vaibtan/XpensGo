@@ -27,11 +27,24 @@ When documents conflict, product intent in the Product Document governs the PRD,
 
 ## Current repository state
 
-The replacement implementation has started under `apps/` and `packages/`. It currently contains the pinned Next.js/OpenNext web shell, an Effect-based API Worker with real `fetch` and Queue execution boundaries, versioned contracts, validated runtime configuration, content-minimized correlation/job telemetry, strict shared tooling, and Worker-runtime tests. Secret-backed configuration is intentionally deferred until the first operation that consumes it. Neon/Hyperdrive persistence, authentication, outbox recovery, Telegram behavior, and deployed staging evidence remain Phase 1 and Phase 2 work; the local tracer is not a user-ready product.
+The replacement implementation has started under `apps/` and `packages/`. It currently contains the pinned Next.js/OpenNext web shell, an Effect-based API Worker with real `fetch` and Queue execution boundaries, versioned contracts, validated runtime configuration, content-minimized correlation/job telemetry, strict shared tooling, and Worker-runtime tests. The local PostgreSQL foundation now adds forward-only Effect SQL migrations, separate migration and runtime roles, ownership constraints, inbound-event idempotency, a transactional outbox record, and real-database integration tests. Neon/Hyperdrive deployment, authentication, Queue publication and recovery, Telegram behavior, and deployed staging evidence remain Phase 1 and Phase 2 work; the local tracer is not a user-ready product.
 
 The Python bot, local SQLite database, and original D1 Cloudflare Worker remain hackathon experiments. They are useful as behavioral references and test fixtures but are not reused as the production runtime. Legacy artifacts should remain intact until the replacement reproduces the intended behavior and any retained data has been audited.
 
 The waitlist site and its setup material are separate acquisition assets. The root `SETUP.md` and `XpensGo Waitlist/` directory apply to that waitlist, not to the new application runtime.
+
+## Local PostgreSQL workflow
+
+Docker provides the reproducible PostgreSQL 17 development database. The committed credentials are local-only and bind PostgreSQL to `127.0.0.1:55432`.
+
+```powershell
+npm ci
+npm run db:up
+npm run db:migrate
+npm run test:integration
+```
+
+`npm run db:down` stops the database without deleting its named volume. Application code connects as `xpensego_runtime`; migrations use the separate `xpensego_migrator` connection. Neon and Hyperdrive credentials are not required for this local proof.
 
 ## Delivery order
 

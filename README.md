@@ -27,7 +27,7 @@ When documents conflict, product intent in the Product Document governs the PRD,
 
 ## Current repository state
 
-The replacement implementation has started under `apps/` and `packages/`. It currently contains the pinned Next.js/OpenNext web shell, an Effect-based API Worker with real `fetch` and Queue execution boundaries, versioned contracts, validated runtime configuration, content-minimized correlation/job telemetry, strict shared tooling, and Worker-runtime tests. The local PostgreSQL foundation now adds forward-only Effect SQL migrations, separate migration and runtime roles, ownership constraints, inbound-event idempotency, a transactional outbox record, and real-database integration tests. Neon/Hyperdrive deployment, authentication, Queue publication and recovery, Telegram behavior, and deployed staging evidence remain Phase 1 and Phase 2 work; the local tracer is not a user-ready product.
+The replacement implementation has started under `apps/` and `packages/`. It currently contains the pinned Next.js/OpenNext web shell, an Effect-based API Worker with real `fetch` and Queue execution boundaries, versioned contracts, validated runtime configuration, content-minimized correlation/job telemetry, strict shared tooling, and Worker-runtime tests. The PostgreSQL foundation adds forward-only Effect SQL migrations, separate migration and runtime roles, ownership constraints, inbound-event idempotency, a transactional outbox record, and real-database integration tests. Separate Neon development and staging projects, cache-disabled Hyperdrive bindings, Cloudflare Queues, and deployed API/OpenNext Workers are now provisioned; the deployed Hyperdrive data path, Queue publication and recovery, authentication, and Telegram behavior remain open. The current tracer is not a user-ready product.
 
 The Python bot, local SQLite database, and original D1 Cloudflare Worker remain hackathon experiments. They are useful as behavioral references and test fixtures but are not reused as the production runtime. Legacy artifacts should remain intact until the replacement reproduces the intended behavior and any retained data has been audited.
 
@@ -44,7 +44,7 @@ npm run db:migrate
 npm run test:integration
 ```
 
-`npm run db:down` stops the database without deleting its named volume. Application code connects as `xpensego_runtime`; migrations use the separate `xpensego_migrator` connection. Neon and Hyperdrive credentials are not required for this local proof.
+`npm run db:down` stops the database without deleting its named volume. Application code connects as `xpensego_runtime`; migrations use the separate `xpensego_migrator` connection. Neon and Hyperdrive credentials are not required for this local proof. Managed development and staging resource ownership is documented in [`SETUP.md`](./SETUP.md).
 
 ## Delivery order
 

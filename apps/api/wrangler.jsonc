@@ -10,7 +10,20 @@
     "ENVIRONMENT": "development",
     "SERVICE_NAME": "xpensego-api",
   },
+  "hyperdrive": [
+    {
+      "binding": "HYPERDRIVE",
+      "id": "34a9396f63b84bd18b0e649c8fdf36f0",
+      "localConnectionString": "postgresql://xpensego_runtime:xpensego_runtime_local_only@127.0.0.1:55432/xpensego",
+    },
+  ],
   "queues": {
+    "producers": [
+      {
+        "binding": "PLATFORM_JOBS_QUEUE",
+        "queue": "xpensego-platform-jobs-development",
+      },
+    ],
     "consumers": [
       {
         "queue": "xpensego-platform-jobs-development",
@@ -39,7 +52,20 @@
         "ENVIRONMENT": "staging",
         "SERVICE_NAME": "xpensego-api",
       },
+      "hyperdrive": [
+        {
+          "binding": "HYPERDRIVE",
+          "id": "30c1c2a9f6254a8db3caea36ecfdfe60",
+          "localConnectionString": "postgresql://xpensego_runtime:xpensego_runtime_local_only@127.0.0.1:55432/xpensego",
+        },
+      ],
       "queues": {
+        "producers": [
+          {
+            "binding": "PLATFORM_JOBS_QUEUE",
+            "queue": "xpensego-platform-jobs-staging",
+          },
+        ],
         "consumers": [
           {
             "queue": "xpensego-platform-jobs-staging",

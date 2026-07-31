@@ -2,7 +2,7 @@
 
 **Authorities:** [Product Document](./xpensego-product-doc.md) · [PRD](./PRD.md) · [Technical Specification](./SPEC.md) · [Domain Context](./CONTEXT.md)
 
-**Status:** Phase 1 minimal platform tracer is in progress; the local TypeScript, Effect, Worker, OpenNext, and PostgreSQL foundations are implemented, while authentication, CI database, Neon/Hyperdrive, and deployed staging proofs remain open.
+**Status:** Phase 1 minimal platform tracer is in progress; the TypeScript, Effect, PostgreSQL, Neon/Hyperdrive, Queue, and deployed Worker foundations are implemented, while authentication, the CI database, deployed Hyperdrive transactions, and Queue recovery proofs remain open.
 
 **Execution rule:** Complete phases in order except where a track is explicitly marked parallel. A phase closes only when its exit evidence is linked.
 
@@ -59,23 +59,26 @@ Decision ownership is role-based until named operators are added to the project:
 - [x] Select the Workers-compatible PostgreSQL query and migration stack: Effect SQL, `@effect/sql-pg`, its `pg` backend, and Effect's forward-only migrator ([ADR 0003](./docs/adr/0003-effect-sql-postgres-migrations.md)).
 - [ ] Select Workers-compatible authentication and account recovery.
 - [x] Provide reproducible local PostgreSQL with separate migration and runtime roles; prove the runtime role has DML authority without schema or migration authority.
-- [ ] Provision separate Neon development and staging projects, direct non-pooler Hyperdrive endpoints, and distinct least-privilege runtime and migration roles.
+- [x] Provision separate Neon development and staging projects, direct non-pooler Hyperdrive endpoints, and distinct least-privilege runtime and migration roles.
 - [x] Write and apply the minimal ownership, idempotency, inbound-event, and outbox schema; prove a forward migration from a clean local PostgreSQL database.
 - [ ] Prove the same forward migration from an empty PostgreSQL database in CI.
 - [ ] Disable query caching on every initial Hyperdrive binding and test that one user's data cannot be returned in another authorization context.
-- [ ] Deploy a minimal API Worker whose `fetch` and `queue` entrypoints run Effect programs through the controlled boundary.
+- [x] Deploy a minimal API Worker whose `fetch` and `queue` entrypoints run Effect programs through the controlled boundary.
 - [ ] From staging, prove a real PostgreSQL transaction, uniqueness constraint, concurrent idempotency case, scale-to-zero wake-up, and bounded reconnect behavior through Hyperdrive.
 - [ ] Prove one transaction → outbox → Queue → duplicate-safe consumer path, including failed publication recovery through an idempotent dispatcher and a retry or dead-letter recovery path.
 - [ ] Establish baseline structured logs, correlation and job IDs, safe error reporting, request/job metrics, and Cloudflare usage visibility without financial contents.
 
-**Current local evidence (2026-07-31):**
+**Current Phase 1 evidence (2026-08-01):**
 
 - `npm run check` passes formatting, type-aware lint, strict type-checking, 11 behavioral tests, package declaration builds, an API Worker dry-run bundle, a Next.js production build, and an OpenNext Cloudflare bundle.
 - Worker-runtime tests exercise the real `fetch` and `queue` entrypoints with generated Cloudflare binding types. Contract tests reject excess internal fields and unsupported Queue versions; service tests use deterministic Layers and time.
 - `npm run test:integration` passes six tests against local PostgreSQL 17.10: deterministic empty-database migration, repeatability, least-privilege runtime-role separation, concurrent duplicate convergence, cross-owner first-delivery and replay rejection, and transaction rollback when outbox persistence fails.
 - The PostgreSQL adapter is a scoped Effect Layer created from a redacted runtime connection URL. SQL rows, constraint metadata, and driver errors remain inside the adapter; no database client is retained in module-global state.
 - `npm audit --audit-level=high` is enabled but currently reports 9 upstream findings (8 high, 1 moderate) in the pinned Next.js/OpenNext dependency tree. This keeps the CI/security portion of the tooling item open; forced downgrades or unverified transitive overrides are not accepted as remediation.
-- No deployed staging, Neon/Hyperdrive, external Queue publication or recovery, authentication, or production-recovery claim is made by this evidence.
+- Separate Singapore-region Neon projects now contain the forward-only foundation migration and distinct `xpensego_runtime` / `xpensego_migrator` roles. Direct runtime probes in both environments show the runtime role has only the implemented inbound-table `SELECT` / `INSERT` grants while PostgreSQL denies schema creation and reports no ungranted update authority; the rotated migration credentials reconnect with zero pending migrations.
+- Development and staging Hyperdrive configurations target the direct Neon hosts as `xpensego_runtime`, report SQL response caching disabled, and are bound to deployed API Workers. Environment-specific primary and dead-letter Queues exist; each primary Queue has the deployed API Worker registered as one producer and one consumer.
+- The deployed development and staging API status endpoints return the versioned Effect response for the correct environment. The deployed OpenNext Workers return the static landing Server Component and the request-scoped `/workspace` Server Component with `private, no-store` caching.
+- No deployed Hyperdrive query or transaction, external Queue publication/recovery, authenticated route, Telegram behavior, or production-recovery claim is made by this evidence.
 
 **Exit gate:** a clean clone installs, migrates, type-checks, tests, and builds without production credentials; staging proves OpenNext SSR, the Effect `fetch`/`queue` boundary, uncached Neon access through Hyperdrive, concurrent idempotency, and one recoverable outbox/Queue path.
 

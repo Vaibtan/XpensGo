@@ -20,6 +20,6 @@ export function resolvePackageCommand({ command, args, nodeExecutable, npmCliPat
   }
 
   const cliPath =
-    command === "npm" ? npmCliPath : path.join(path.dirname(npmCliPath), "npx-cli.js");
+    command === "npm" ? npmCliPath : path.win32.join(path.win32.dirname(npmCliPath), "npx-cli.js");
   return { command: nodeExecutable, args: [cliPath, ...args] };
 }

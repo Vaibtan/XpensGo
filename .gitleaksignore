@@ -1,0 +1,7 @@
+# Synthetic authentication and staging-proof fixtures committed before the
+# complete-history scanner was enabled for these files. Each exception is
+# pinned to one commit, path, rule, and line; later secret-shaped values remain blocked.
+f55a019a2f33aa46d25e88c3b386676edc9647d9:apps/api/src/index.integration.test.ts:generic-api-key:87
+f16de74b423eafcdd380de1e5fdef6d54929d499:apps/api/src/index.integration.test.ts:generic-api-key:105
+f16de74b423eafcdd380de1e5fdef6d54929d499:apps/api/src/index.integration.test.ts:generic-api-key:106
+f16de74b423eafcdd380de1e5fdef6d54929d499:apps/api/src/index.test.ts:generic-api-key:52

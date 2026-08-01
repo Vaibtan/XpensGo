@@ -2,7 +2,7 @@
 
 **Authorities:** [Product Document](./xpensego-product-doc.md) · [PRD](./PRD.md) · [Technical Specification](./SPEC.md) · [Domain Context](./CONTEXT.md)
 
-**Status:** Phase 1 minimal platform tracer is in progress; the TypeScript, Effect, PostgreSQL, recoverable outbox, Neon/Hyperdrive, Queue, deployed Worker, and CI foundations are implemented, while authentication and deployed Hyperdrive-to-Queue proofs remain open.
+**Status:** Phase 1 minimal platform tracer is in progress; the TypeScript, Effect, PostgreSQL, recoverable outbox, Neon/Hyperdrive, Queue, deployed Worker, CI, authentication, and API-contract choices are established, while their implementation and deployed Hyperdrive-to-Queue proofs remain open.
 
 **Execution rule:** Complete phases in order except where a track is explicitly marked parallel. A phase closes only when its exit evidence is linked.
 
@@ -57,7 +57,7 @@ Decision ownership is role-based until named operators are added to the project:
 - [ ] Configure local, development, and staging environments with typed Cloudflare bindings, an explicit compatibility date, validated defaults, and secret bindings.
 - [ ] Deploy a minimal OpenNext application and prove Server Components plus an explicitly dynamic authenticated route in a local production-runtime preview and deployed staging.
 - [x] Select the Workers-compatible PostgreSQL query and migration stack: Effect SQL, `@effect/sql-pg`, its `pg` backend, and Effect's forward-only migrator ([ADR 0003](./docs/adr/0003-effect-sql-postgres-migrations.md)).
-- [ ] Select Workers-compatible authentication and account recovery.
+- [x] Select self-hosted Better Auth with application-owned identity and Resend-backed recovery email for development and the small alpha ([ADR 0004](./docs/adr/0004-better-auth-effect-http-api.md)).
 - [x] Provide reproducible local PostgreSQL with separate migration and runtime roles; prove the runtime role has DML authority without schema or migration authority.
 - [x] Provision separate Neon development and staging projects, direct non-pooler Hyperdrive endpoints, and distinct least-privilege runtime and migration roles.
 - [x] Write and apply the minimal ownership, idempotency, inbound-event, and outbox schema; prove a forward migration from a clean local PostgreSQL database.
@@ -70,6 +70,7 @@ Decision ownership is role-based until named operators are added to the project:
 
 **Current Phase 1 evidence (2026-08-01):**
 
+- Current primary-source research and a pinned local HttpApi/OpenAPI proof support the accepted Better Auth and Effect HttpApi decision ([research](./docs/research/workers-auth-api-contracts.md), [ADR 0004](./docs/adr/0004-better-auth-effect-http-api.md)). This is selection evidence only; Workerd, Hyperdrive, cookie, recovery-email, and deployed-staging proofs remain open.
 - `npm run check` passes formatting, type-aware lint, strict type-checking, 21 behavioral tests, package declaration builds, an API Worker dry-run bundle, a Next.js production build, and an OpenNext Cloudflare bundle.
 - Hosted [GitHub Actions run 30686649821](https://github.com/Vaibtan/XpensGo/actions/runs/30686649821) passes a locked clean install and the same quality and production-build checks on Linux, a forward migration and 14 integration tests against an isolated empty PostgreSQL 17 database, complete-history Gitleaks scanning, and the reviewed dependency-audit policy.
 - Worker-runtime tests exercise the real `fetch` and `queue` entrypoints with generated Cloudflare binding types. Contract tests reject excess internal fields, financial Queue contents, and unsupported Queue versions; service tests use deterministic Layers and time.

@@ -1,7 +1,7 @@
-# Xpensego — Technical Specification v4.4
+# Xpensego — Technical Specification v4.5
 
 **Status:** Active implementation baseline
-**Updated:** 31 July 2026
+**Updated:** 1 August 2026
 **Product authority:** [Product Document](./xpensego-product-doc.md)
 **Behavioral authority:** [PRD](./PRD.md)
 **Domain language:** [Domain Context](./CONTEXT.md)
@@ -21,13 +21,15 @@ The existing Python bot, SQLite database, and Cloudflare Worker are hackathon ar
 3. **Effect application runtime.** Backend use cases are Effect programs. Cloudflare Worker entrypoints provide dependencies, execute programs, and translate typed outcomes to transport responses. NestJS is not used.
 4. **Cloudflare production platform.** Workers provide compute; Queues provide asynchronous delivery; Workflows provide durable multi-step execution; Cron Triggers initiate schedules; R2 stores controlled objects; Cloudflare secrets and observability support runtime operations.
 5. **Neon PostgreSQL authority.** Neon is the managed PostgreSQL provider and system of record for users, ledgers, transactions, imports, consent, delivery, audit, and usage. Workers reach application traffic through cache-disabled Hyperdrive configurations. Application adapters use Effect SQL with `@effect/sql-pg` and its `pg` backend; schema changes use Effect SQL's forward-only migrator through a separate direct administrative connection, as recorded in [ADR 0003](./docs/adr/0003-effect-sql-postgres-migrations.md).
-6. **Shared messaging seam.** Telegram is the first adapter; later WhatsApp behavior reuses the same domain interfaces. The Product Document owns its release gate.
-7. **One product across surfaces.** Web and messaging surfaces use the same users, ledgers, domain rules, and audit history.
-8. **Asynchronous external work.** Imports, model work, exports, deletion, and notifications use Queues or Workflows rather than long-lived webhook requests.
-9. **Structured model operations.** Models receive narrow tools and cannot choose identity scope, write database queries, or bypass domain invariants.
-10. **Production behavior is evaluated end to end.** Handler-only tests cannot satisfy a release gate.
-11. **No speculative microservices.** Web and backend are separate deployments, but domain behavior remains a modular monolith. Queue consumers or Workflows split into additional Workers only for an evidenced isolation or scaling need.
-12. **External-data readiness is evidenced.** Production recovery and capacity follow the accepted [Cloudflare/Effect](./docs/adr/0001-cloudflare-workers-effect-backend.md) and [Neon](./docs/adr/0002-neon-postgres.md) decisions and must pass the Checklist's invite-readiness evidence.
+6. **Application-owned identity with self-hosted authentication.** Better Auth runs in the API Worker and owns web credentials, verification, and sessions. Xpensego owns the stable User, Ledger, Channel Identity, Telegram link challenge, and ActorContext relationships, as recorded in [ADR 0004](./docs/adr/0004-better-auth-effect-http-api.md).
+7. **Effect-owned HTTP contracts.** Pinned `@effect/platform` HttpApi definitions and Effect Schemas own application routing, runtime decoding, typed errors, OpenAPI generation, and the derived web client. No second routing or schema framework is maintained.
+8. **Shared messaging seam.** Telegram is the first adapter; later WhatsApp behavior reuses the same domain interfaces. The Product Document owns its release gate.
+9. **One product across surfaces.** Web and messaging surfaces use the same users, ledgers, domain rules, and audit history.
+10. **Asynchronous external work.** Imports, model work, exports, deletion, and notifications use Queues or Workflows rather than long-lived webhook requests.
+11. **Structured model operations.** Models receive narrow tools and cannot choose identity scope, write database queries, or bypass domain invariants.
+12. **Production behavior is evaluated end to end.** Handler-only tests cannot satisfy a release gate.
+13. **No speculative microservices.** Web and backend are separate deployments, but domain behavior remains a modular monolith. Queue consumers or Workflows split into additional Workers only for an evidenced isolation or scaling need.
+14. **External-data readiness is evidenced.** Production recovery and capacity follow the accepted [Cloudflare/Effect](./docs/adr/0001-cloudflare-workers-effect-backend.md) and [Neon](./docs/adr/0002-neon-postgres.md) decisions and must pass the Checklist's invite-readiness evidence.
 
 Open selections and their blocking phase are listed once in §19.
 
@@ -542,6 +544,7 @@ Evaluation reports extraction accuracy by field and source format. A single aggr
 - The production build uses the Cloudflare OpenNext adapter. Local production-runtime preview proves bundling and runtime compatibility. Development modes may emulate or exercise only their supported binding subset; deployed staging is the required release evidence for Hyperdrive/Neon networking, Queues, Workflows, Cron Triggers, R2, provider webhooks, and edge behavior.
 - Interactive ledger editing, imports, review, and chat use client code only where browser state is required.
 - Server-side data access calls the versioned API Worker contract with the user's valid session context, using a Cloudflare service binding where appropriate and an authenticated HTTPS endpoint otherwise.
+- The OpenNext Worker forwards same-origin `/v1/*` application and authentication requests to the API Worker through a Service Binding; browser authentication does not depend on third-party cookies.
 - User-specific financial responses are not stored in public, framework-shared, CDN, or cache-enabled Hyperdrive paths.
 - Web mutations call the API Worker rather than reimplementing domain behavior in Server Actions.
 - The generated or versioned client contract prevents silent drift between web and API.
@@ -550,6 +553,7 @@ Evaluation reports extraction accuracy by field and source format. A single aggr
 ## 12. HTTP and contract conventions
 
 - Public application endpoints are versioned under `/v1`.
+- Better Auth is isolated under `/v1/auth/*`. Application endpoints are defined by pinned `@effect/platform` HttpApi contracts built from Effect Schemas; the same definitions generate OpenAPI and the typed web client.
 - Internal request, response, Queue, and Workflow payloads have versioned schemas and reject unknown fields. Third-party webhooks validate the required supported subset and tolerate additive provider fields.
 - Errors use stable codes, safe user messages, correlation IDs, and no sensitive contents.
 - The API build publishes an OpenAPI document generated from or verified against the same transport schemas used at runtime.
@@ -717,12 +721,10 @@ The [Delivery Checklist](./CHECKLIST.md) exclusively owns milestones, dependenci
 
 ## 19. Open technical decisions
 
-- Authentication and account-recovery provider.
 - Neon production region after latency and data-location review.
 - Exact paid Neon tier and any independent backup required to meet the selected recovery objectives.
 - Recovery-point and recovery-time objectives, backup retention, encryption-key ownership, and backup deletion policy.
 - Cloudflare plan selection if measured controlled-cohort headroom exceeds Free allowances.
-- API routing and contract-generation tooling.
 - Upload scanning implementation around R2.
 - Exact Queue-versus-Workflow assignment for large imports and exports after the Phase 1 spike.
 - Model provider, model choice, and routing policy.

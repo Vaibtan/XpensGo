@@ -1,6 +1,7 @@
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "@effect/platform";
 import { Schema } from "effect";
 
+import { IdentityGroup } from "../identity/identity-api.js";
 import { CorrelationId } from "./correlation-id.js";
 import { PlatformStatusV1 } from "./platform-status.js";
 
@@ -55,8 +56,16 @@ const PlatformGroup = HttpApiGroup.make("platform").add(
     .addError(PlatformInternalError, { status: 500 }),
 );
 
+/** Runtime API containing database-free platform routes. */
+export class PlatformApi extends HttpApi.make("xpensego-platform-api")
+  .add(PlatformGroup)
+  .prefix("/v1") {}
+
 /** Versioned Xpensego application API contract. */
-export class XpensegoApi extends HttpApi.make("xpensego-api").add(PlatformGroup).prefix("/v1") {}
+export class XpensegoApi extends HttpApi.make("xpensego-api")
+  .add(PlatformGroup)
+  .add(IdentityGroup)
+  .prefix("/v1") {}
 
 /** OpenAPI 3.1 document generated from the runtime application contract. */
 export const XpensegoOpenApi = OpenApi.fromApi(XpensegoApi);

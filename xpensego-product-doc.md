@@ -12,7 +12,7 @@ Xpensego is a chat-native expense product that turns transaction records a user 
 
 The product is not merely a Telegram bot and it is not a dashboard-first finance application. Messaging provides low-friction capture and answers. The web application provides the control and trust surface: review, correction, imports, budgets, settings, export, and deletion.
 
-**Positioning:** *Your bank already tells you everything. Xpensego makes it mean something.*
+**Positioning:** _Your bank already tells you everything. Xpensego makes it mean something._
 
 ## 2. Problem
 
@@ -95,6 +95,12 @@ The invite-ready core is the PRD's **[CORE]** requirement set. At product level,
 - export, permanent deletion, product measurement, and safe operation.
 
 The [PRD](./PRD.md) is authoritative for the individual behaviors and acceptance conditions.
+
+The initial taxonomy uses stable internal identifiers for Food & Dining, Groceries, Transport,
+Housing, Utilities, Shopping, Healthcare, Education, Entertainment, Travel, Personal & Family,
+Fees & Taxes, Transfers, Cash Withdrawal, Income, Refunds, and Other. `Other` is the sole fallback.
+Display-label editing and user-created categories remain a later product-policy decision; neither may
+change the stable identifiers stored on existing records.
 
 ## 8. Explicitly deferred
 
@@ -211,7 +217,7 @@ The [Delivery Checklist](./CHECKLIST.md) owns the executable phase and dependenc
 
 ## 14. Open product decisions
 
-- The exact initial category taxonomy and customization policy.
+- Category customization policy beyond the fixed initial taxonomy.
 - Whether the first web conversational experience is a full chat surface or contextual queries from ledger views.
 - The product thresholds that graduate WhatsApp from implementation to public availability.
 - Pricing tiers and entitlements.

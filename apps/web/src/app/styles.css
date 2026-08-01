@@ -317,6 +317,176 @@ a:focus-visible {
   letter-spacing: 0.08em;
 }
 
+.identityWorkspace {
+  display: grid;
+  gap: 2.25rem;
+  padding: clamp(3rem, 8vw, 6rem) 0 4rem;
+}
+
+.identityIntro {
+  display: grid;
+  grid-template-columns: minmax(15rem, 0.8fr) minmax(19rem, 1.2fr);
+  gap: 1.5rem clamp(2rem, 8vw, 7rem);
+  align-items: end;
+}
+
+.identityIntro .workspaceIndex {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.identityIntro h1 {
+  max-width: 11ch;
+  font-size: clamp(3.1rem, 7vw, 6rem);
+}
+
+.identityIntro > p:last-child {
+  max-width: 34rem;
+  margin: 0 0 0.5rem;
+  color: #536577;
+  font-size: 1.05rem;
+  line-height: 1.65;
+}
+
+.identityGrid {
+  display: grid;
+  grid-template-columns: minmax(16rem, 0.8fr) minmax(22rem, 1.2fr);
+  border-top: 1px solid rgb(20 37 59 / 24%);
+  border-bottom: 1px solid rgb(20 37 59 / 24%);
+}
+
+.identityPanel {
+  display: grid;
+  min-height: 24rem;
+  padding: clamp(1.5rem, 4vw, 2.5rem);
+  align-content: start;
+  gap: 1rem;
+}
+
+.identityPanel + .identityPanel {
+  border-left: 1px solid rgb(20 37 59 / 24%);
+}
+
+.identityPanel h2 {
+  margin: 0.2rem 0 2rem;
+  font-family: "Aptos Display", "Trebuchet MS", sans-serif;
+  font-size: clamp(2rem, 5vw, 3.3rem);
+  font-weight: 600;
+  letter-spacing: -0.055em;
+}
+
+.panelLabel {
+  margin: 0;
+  color: #376879;
+  font-family: ui-monospace, "Cascadia Code", monospace;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.identityPanel label {
+  color: #324b60;
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.identityPanel input {
+  width: 100%;
+  padding: 0.8rem 0;
+  border: 0;
+  border-bottom: 2px solid #738995;
+  border-radius: 0;
+  background: transparent;
+  color: #14253b;
+}
+
+.controlNote {
+  max-width: 34rem;
+  margin: 0;
+  color: #607181;
+  line-height: 1.55;
+}
+
+.controlButton {
+  width: fit-content;
+  margin-top: 1rem;
+}
+
+.channelHeading {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.channelState {
+  padding: 0.4rem 0.65rem;
+  border: 1px solid #7e979e;
+  color: #285e68;
+  font-family: ui-monospace, "Cascadia Code", monospace;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.linkedIdentityList {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.linkedIdentity {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.9rem 0;
+  border-top: 1px solid rgb(20 37 59 / 15%);
+}
+
+.challengeSlip {
+  display: grid;
+  gap: 0.7rem;
+  margin-top: 1rem;
+  padding: 1.2rem;
+  border: 1px dashed #527781;
+  background:
+    repeating-linear-gradient(
+      180deg,
+      transparent 0,
+      transparent 1.65rem,
+      rgb(33 101 121 / 9%) 1.65rem,
+      rgb(33 101 121 / 9%) 1.7rem
+    ),
+    #f8fbfc;
+}
+
+.challengeSlip span,
+.challengeSlip small {
+  color: #536577;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.challengeSlip code {
+  overflow-wrap: anywhere;
+  color: #153b5b;
+  font-family: ui-monospace, "Cascadia Code", monospace;
+  font-size: 0.84rem;
+  line-height: 1.6;
+}
+
+.workspaceFeedback {
+  width: fit-content;
+  margin: 0;
+  padding-left: 0.75rem;
+  border-left: 3px solid #ef9f3f;
+  color: #365064;
+}
+
 @media (max-width: 44rem) {
   .authShell {
     grid-template-columns: 1fr;
@@ -338,5 +508,20 @@ a:focus-visible {
 
   .ledgerRail > p {
     grid-column: 1 / -1;
+  }
+
+  .identityIntro,
+  .identityGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .identityPanel + .identityPanel {
+    border-top: 1px solid rgb(20 37 59 / 24%);
+    border-left: 0;
+  }
+
+  .linkedIdentity {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }

@@ -56,6 +56,31 @@ const AcceptanceProbeResult = Schema.Struct({
   redeliveryToken: Schema.String.pipe(Schema.pattern(/^[0-9a-f]{64}$/)),
 });
 
+const IdentityResponse = Schema.Struct({
+  version: Schema.Literal(1),
+  user: Schema.Struct({
+    id: Schema.UUID,
+    email: Schema.String,
+    name: Schema.String,
+    timezone: Schema.String,
+  }),
+  ledger: Schema.Struct({ id: Schema.UUID }),
+  telegramIdentities: Schema.Array(
+    Schema.Struct({
+      channelIdentityId: Schema.UUID,
+      linkedAtMillis: Schema.Number,
+    }),
+  ),
+});
+
+const TelegramChallengeResponse = Schema.Struct({
+  version: Schema.Literal(1),
+  channel: Schema.Literal("telegram"),
+  purpose: Schema.Literal("link", "unlink"),
+  token: Schema.String.pipe(Schema.length(43)),
+  expiresAtMillis: Schema.Number,
+});
+
 class RecordingQueue implements Queue<unknown> {
   readonly messages: Array<unknown> = [];
 
@@ -341,6 +366,110 @@ describe("API Worker outbox integration", () => {
         email: "alpha-one@example.test",
         name: "Alpha One",
       },
+    });
+
+    const sessionCookie = setCookie?.split(";", 1)[0] ?? "";
+    const readIdentity = () =>
+      worker.fetch(
+        makeWorkerRequest(`${origin}/v1/identity`, {
+          headers: { cookie: sessionCookie },
+        }),
+        integrationEnv,
+        createExecutionContext(),
+      );
+    const firstIdentityResponse = await readIdentity();
+    const firstIdentity = Schema.decodeUnknownSync(IdentityResponse)(
+      await firstIdentityResponse.json(),
+    );
+    const repeatedIdentityResponse = await readIdentity();
+    const repeatedIdentity = Schema.decodeUnknownSync(IdentityResponse)(
+      await repeatedIdentityResponse.json(),
+    );
+
+    expect(firstIdentityResponse.status).toBe(200);
+    expect(firstIdentityResponse.headers.get("cache-control")).toBe("no-store");
+    expect(firstIdentity).toMatchObject({
+      version: 1,
+      user: {
+        email: "alpha-one@example.test",
+        name: "Alpha One",
+        timezone: "Asia/Kolkata",
+      },
+      telegramIdentities: [],
+    });
+    expect(repeatedIdentity.user.id).toBe(firstIdentity.user.id);
+    expect(repeatedIdentity.ledger.id).toBe(firstIdentity.ledger.id);
+
+    const crossSiteMutationResponse = await worker.fetch(
+      makeWorkerRequest(`${origin}/v1/identity/timezone`, {
+        method: "PUT",
+        headers: {
+          cookie: sessionCookie,
+          "content-type": "application/json",
+          origin: "https://attacker.example",
+          "sec-fetch-site": "cross-site",
+        },
+        body: JSON.stringify({ timezone: "America/New_York" }),
+      }),
+      integrationEnv,
+      createExecutionContext(),
+    );
+    expect(crossSiteMutationResponse.status).toBe(403);
+    expect(await crossSiteMutationResponse.json()).toMatchObject({
+      version: 1,
+      error: { code: "cross_site_request_forbidden" },
+    });
+
+    const timezoneResponse = await worker.fetch(
+      makeWorkerRequest(`${origin}/v1/identity/timezone`, {
+        method: "PUT",
+        headers: {
+          cookie: sessionCookie,
+          "content-type": "application/json",
+          origin,
+        },
+        body: JSON.stringify({ timezone: "Europe/London" }),
+      }),
+      integrationEnv,
+      createExecutionContext(),
+    );
+
+    expect(timezoneResponse.status).toBe(200);
+    expect(await timezoneResponse.json()).toMatchObject({
+      version: 1,
+      user: { timezone: "Europe/London" },
+      ledger: { id: firstIdentity.ledger.id },
+    });
+
+    const challengeResponse = await worker.fetch(
+      makeWorkerRequest(`${origin}/v1/identity/telegram/link-challenges`, {
+        method: "POST",
+        headers: { cookie: sessionCookie, origin },
+      }),
+      integrationEnv,
+      createExecutionContext(),
+    );
+    const challenge = Schema.decodeUnknownSync(TelegramChallengeResponse)(
+      await challengeResponse.json(),
+    );
+    expect(challengeResponse.status).toBe(201);
+    expect(challenge).toMatchObject({ channel: "telegram", purpose: "link" });
+    expect(challenge.expiresAtMillis).toBeGreaterThan(Date.now());
+
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const sql = yield* PgClient.PgClient;
+        yield* sql`
+          UPDATE auth_session
+          SET "expiresAt" = CURRENT_TIMESTAMP - INTERVAL '1 second'
+        `;
+      }).pipe(Effect.provide(migrationClientLayer), Effect.scoped),
+    );
+    const expiredSessionResponse = await readIdentity();
+    expect(expiredSessionResponse.status).toBe(401);
+    expect(await expiredSessionResponse.json()).toMatchObject({
+      version: 1,
+      error: { code: "authentication_required" },
     });
   });
 

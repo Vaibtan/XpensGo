@@ -2,7 +2,7 @@
 
 **Authorities:** [Product Document](./xpensego-product-doc.md) · [PRD](./PRD.md) · [Technical Specification](./SPEC.md) · [Domain Context](./CONTEXT.md)
 
-**Status:** Phase 1 minimal platform tracer is complete with provider-backed staging evidence; Phase 2 is next. This closes the platform spike, not product, Telegram, recovery-email, or external-user readiness.
+**Status:** The minimal platform tracer has provider-backed staging evidence. Identity and personal-ledger prerequisites are implemented and verified locally; Telegram ingress, recovery email, transaction behavior, and external-user readiness remain open.
 
 **Execution rule:** Complete phases in order except where a track is explicitly marked parallel. A phase closes only when its exit evidence is linked.
 
@@ -90,11 +90,13 @@ Decision ownership is role-based until named operators are added to the project:
 ### Identity and ledger prerequisites
 
 - [ ] Implement the approved signup, sign-in, sign-out, session validation, and account-recovery policy.
-- [ ] Create one personal ledger with a non-null `owner_user_id` per user and enforce that ownership relationship with a unique constraint.
-- [ ] Seed stable initial category identifiers before the first transaction is written.
-- [ ] Capture a user timezone during onboarding, apply a documented default, and let the user change it.
-- [ ] Implement expiring one-use verification for Telegram linking and unlinking plus visible link state and safe relinking.
-- [ ] Test channel-identity uniqueness, challenge replay, unlinking, relinking, session expiry, and two-user isolation.
+- [x] Create one personal ledger with a non-null `owner_user_id` per user and enforce that ownership relationship with a unique constraint.
+- [x] Seed stable initial category identifiers before the first transaction is written.
+- [x] Capture a user timezone during onboarding, apply a documented default, and let the user change it.
+- [x] Implement expiring one-use verification for Telegram linking and unlinking plus visible link state and safe relinking.
+- [x] Test channel-identity uniqueness, challenge replay, unlinking, relinking, session expiry, and two-user isolation.
+
+**Identity prerequisite evidence (local):** [Identity and personal Ledger foundation](./docs/evidence/identity-foundation.md). This is implementation evidence, not Telegram-provider or deployed-staging acceptance.
 
 ### Telegram ingress and durable replies
 

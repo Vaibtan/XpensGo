@@ -22,6 +22,7 @@ The selected option keeps identity relationships and financial authorization ins
 - Neon Auth remains disabled. No alternative authentication provider or HTTP framework is installed or maintained as a fallback.
 - If either selected stack fails its required Workerd, Hyperdrive, cookie, resource-lifecycle, or contract-generation spike, implementation stops and this decision is reopened.
 - Better Auth SQL is reviewed and translated into Xpensego's forward-only Effect migrations; request handling never runs automatic production migrations.
+- Private application endpoints validate fixed-lifetime sessions with provider refresh disabled until the pending authentication UX decision defines and tests refresh-cookie propagation.
 - Authentication produces a verified principal only. Clients and provider records cannot construct an ActorContext or select a User or Ledger.
 - Telegram linking remains an application-owned, hashed, expiring, rate-limited, one-use challenge flow rather than Better Auth account linking.
 - The OpenNext Worker forwards same-origin `/v1/*` traffic to the API Worker through a Service Binding so secure host cookies and origin checks do not depend on third-party cookies.

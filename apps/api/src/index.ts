@@ -1,5 +1,6 @@
 import { layer as consoleRuntimeTelemetryLayer } from "@xpensego/adapters/cloudflare/console-runtime-telemetry";
 import {
+  type BetterAuthRuntimeConfig,
   BetterAuthUnavailable,
   handleBetterAuthRequest,
 } from "@xpensego/adapters/auth/better-auth";
@@ -8,6 +9,8 @@ import {
   makeRuntimeConfigLayer,
 } from "@xpensego/adapters/cloudflare/runtime-config";
 import { makePostgresOutboxPersistenceLayer } from "@xpensego/adapters/postgres/outbox-store";
+import { makePostgresIdentityStoreLayer } from "@xpensego/adapters/postgres/identity-store";
+import { webCryptoLinkChallengeLayer } from "@xpensego/adapters/web-crypto/link-challenge-crypto";
 import {
   OutboxJobV1,
   type OutboxJobV1 as OutboxQueueJob,
@@ -27,7 +30,7 @@ import type { RuntimeConfig } from "@xpensego/domain/platform/runtime-config";
 import { RuntimeTelemetry } from "@xpensego/domain/platform/runtime-telemetry";
 import { Effect, Layer, Redacted, Schema } from "effect";
 
-import { handleApplicationRequest } from "./http.js";
+import { handleApplicationRequest, handleIdentityRequest } from "./http.js";
 import { makeOutboxQueuePublicationLayer } from "./outbox-queue-publication.js";
 import { handlePhase1StagingProbe } from "./phase1-staging-probe.js";
 
@@ -54,6 +57,23 @@ function invocationLayer(
       serviceName: env.SERVICE_NAME,
     }),
     consoleRuntimeTelemetryLayer,
+  );
+}
+
+function betterAuthRuntimeConfig(env: CloudflareBindings): BetterAuthRuntimeConfig {
+  return {
+    baseUrl: env.PUBLIC_WEB_ORIGIN,
+    databaseUrl: Redacted.make(env.HYPERDRIVE.connectionString),
+    secret: Redacted.make(env.BETTER_AUTH_SECRET ?? ""),
+    trustedOrigin: env.PUBLIC_WEB_ORIGIN,
+    useSecureCookies: env.PUBLIC_WEB_ORIGIN.startsWith("https://"),
+  };
+}
+
+function identityInvocationLayer(env: CloudflareBindings) {
+  return Layer.merge(
+    makePostgresIdentityStoreLayer(Redacted.make(env.HYPERDRIVE.connectionString)),
+    webCryptoLinkChallengeLayer,
   );
 }
 
@@ -88,7 +108,14 @@ async function runFetch(request: Request, env: CloudflareBindings): Promise<Resp
     return runAuthenticationFetch(request, env);
   }
 
-  return handleApplicationRequest(request, invocationLayer(env)).catch((cause: unknown) => {
+  const applicationPath = new URL(request.url).pathname;
+  const isIdentityRequest =
+    applicationPath === "/v1/identity" || applicationPath.startsWith("/v1/identity/");
+  const applicationResponse = isIdentityRequest
+    ? handleIdentityRequest(request, identityInvocationLayer(env), betterAuthRuntimeConfig(env))
+    : handleApplicationRequest(request, invocationLayer(env));
+
+  return applicationResponse.catch((cause: unknown) => {
     const correlationId = Schema.decodeUnknownSync(CorrelationId)(crypto.randomUUID());
     // oxlint-disable-next-line no-console -- Cloudflare records structured console errors in Workers Logs.
     console.error(
@@ -114,16 +141,7 @@ async function runFetch(request: Request, env: CloudflareBindings): Promise<Resp
 }
 
 function runAuthenticationFetch(request: Request, env: CloudflareBindings): Promise<Response> {
-  const program = handleBetterAuthRequest(
-    {
-      baseUrl: env.PUBLIC_WEB_ORIGIN,
-      databaseUrl: Redacted.make(env.HYPERDRIVE.connectionString),
-      secret: Redacted.make(env.BETTER_AUTH_SECRET ?? ""),
-      trustedOrigin: env.PUBLIC_WEB_ORIGIN,
-      useSecureCookies: env.PUBLIC_WEB_ORIGIN.startsWith("https://"),
-    },
-    request,
-  ).pipe(
+  const program = handleBetterAuthRequest(betterAuthRuntimeConfig(env), request).pipe(
     Effect.map((response) => {
       const headers = new Headers(response.headers);
       headers.set("cache-control", "no-store");

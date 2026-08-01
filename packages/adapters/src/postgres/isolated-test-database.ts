@@ -9,6 +9,7 @@ const localTestRuntimeUrl =
 
 type IsolatedTestDatabaseName =
   | "xpensego_inbound_store_integration"
+  | "xpensego_identity_store_integration"
   | "xpensego_migration_integration"
   | "xpensego_outbox_store_integration"
   | "xpensego_worker_outbox_integration";

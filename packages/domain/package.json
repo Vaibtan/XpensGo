@@ -4,8 +4,13 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./category/default-categories": "./src/category/default-categories.ts",
     "./channel/accept-inbound-event": "./src/channel/accept-inbound-event.ts",
     "./channel/inbound-event": "./src/channel/inbound-event.ts",
+    "./identity/actor-context": "./src/identity/actor-context.ts",
+    "./identity/channel-identity": "./src/identity/channel-identity.ts",
+    "./identity/identity": "./src/identity/identity.ts",
+    "./identity/user-timezone": "./src/identity/user-timezone.ts",
     "./identity/user-id": "./src/identity/user-id.ts",
     "./ledger/ledger-id": "./src/ledger/ledger-id.ts",
     "./outbox/outbox-delivery": "./src/outbox/outbox-delivery.ts",

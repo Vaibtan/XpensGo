@@ -8,6 +8,7 @@ import { outboxRecoveryPolicyMigration } from "./migrations/0003-outbox-recovery
 import { queueOutcomeUnknownMigration } from "./migrations/0004-queue-outcome-unknown.js";
 import { betterAuthMigration } from "./migrations/0005-better-auth.js";
 import { outboxConsumptionObservabilityMigration } from "./migrations/0006-outbox-consumption-observability.js";
+import { identityFoundationMigration } from "./migrations/0007-identity-foundation.js";
 
 const migrationProgram = Migrator.make({})({
   loader: Migrator.fromRecord({
@@ -17,6 +18,7 @@ const migrationProgram = Migrator.make({})({
     "0004_queue_outcome_unknown": queueOutcomeUnknownMigration,
     "0005_better_auth": betterAuthMigration,
     "0006_outbox_consumption_observability": outboxConsumptionObservabilityMigration,
+    "0007_identity_foundation": identityFoundationMigration,
   }),
   table: "xpensego_migrations",
 });

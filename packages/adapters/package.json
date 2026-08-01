@@ -8,9 +8,11 @@
     "./cloudflare/console-runtime-telemetry": "./src/cloudflare/console-runtime-telemetry.ts",
     "./cloudflare/runtime-config": "./src/cloudflare/runtime-config.ts",
     "./postgres/inbound-event-store": "./src/postgres/inbound-event-store.ts",
+    "./postgres/identity-store": "./src/postgres/identity-store.ts",
     "./postgres/isolated-test-database": "./src/postgres/isolated-test-database.ts",
     "./postgres/migrations": "./src/postgres/migrations.ts",
-    "./postgres/outbox-store": "./src/postgres/outbox-store.ts"
+    "./postgres/outbox-store": "./src/postgres/outbox-store.ts",
+    "./web-crypto/link-challenge-crypto": "./src/web-crypto/link-challenge-crypto.ts"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
@@ -24,6 +26,7 @@
     "@effect/experimental": "0.61.1",
     "@effect/sql": "0.52.1",
     "@effect/sql-pg": "0.53.0",
+    "@xpensego/contracts": "0.1.0",
     "@xpensego/domain": "0.1.0",
     "better-auth": "1.6.25",
     "effect": "3.22.1",

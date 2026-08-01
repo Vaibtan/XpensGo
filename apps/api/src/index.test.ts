@@ -95,8 +95,48 @@ describe("Xpensego API Worker", () => {
             },
           },
         },
+        "/v1/identity": {
+          get: {
+            responses: {
+              "200": {},
+              "401": {},
+              "403": {},
+              "503": {},
+            },
+          },
+        },
+        "/v1/identity/telegram/unlink-challenges": {
+          post: {
+            responses: {
+              "201": {},
+              "400": {},
+              "401": {},
+              "403": {},
+              "404": {},
+              "429": {},
+              "503": {},
+            },
+          },
+        },
       },
     });
+  });
+
+  it("serves database-free routes without reading the Hyperdrive binding", async () => {
+    const bindings = databaseForbiddenEnv();
+    const statusResponse = await worker.fetch(
+      new Request("https://xpensego.test/v1/platform/status") as Parameters<typeof worker.fetch>[0],
+      bindings,
+      createExecutionContext(),
+    );
+    const openApiResponse = await worker.fetch(
+      new Request("https://xpensego.test/v1/openapi.json") as Parameters<typeof worker.fetch>[0],
+      bindings,
+      createExecutionContext(),
+    );
+
+    expect(statusResponse.status).toBe(200);
+    expect(openApiResponse.status).toBe(200);
   });
 
   it("returns a safe versioned not-found response", async () => {

@@ -5,9 +5,11 @@ import {
   coldResumeRequestTimeoutMilliseconds,
   coldResumeWaitMilliseconds,
   dispatcherCronPeriodMilliseconds,
+  effectiveNeonSuspendTimeoutSeconds,
   maximumColdResumeLatencyMilliseconds,
   maximumColdWindowAlignmentWaitMilliseconds,
   maximumManagedProofMilliseconds,
+  maximumProvenNeonSuspendTimeoutSeconds,
   maximumScheduledRecoveryWaitMilliseconds,
 } from "./phase1-staging-proof-policy.js";
 
@@ -31,6 +33,12 @@ describe("Phase 1 staging proof timing policy", () => {
       dispatcherCronPeriodMilliseconds,
     );
     expect(maximumColdResumeLatencyMilliseconds).toBe(coldResumeRequestTimeoutMilliseconds);
+  });
+
+  it("interprets Neon's zero timeout as its five-minute default", () => {
+    expect(effectiveNeonSuspendTimeoutSeconds(0)).toBe(300);
+    expect(effectiveNeonSuspendTimeoutSeconds(60)).toBe(60);
+    expect(maximumProvenNeonSuspendTimeoutSeconds).toBe(300);
   });
 
   it("keeps worst-case managed waits inside the workflow execution budget", () => {

@@ -4,6 +4,9 @@ export const dispatcherCronPeriodMilliseconds = 10 * 60 * 1_000;
 /** Neon default idle threshold plus one minute for an observable idle state. */
 export const coldResumeIdleWindowMilliseconds = 6 * 60 * 1_000;
 
+/** Longest configured suspend timeout that the six-minute observation can prove. */
+export const maximumProvenNeonSuspendTimeoutSeconds = 5 * 60;
+
 /** Bound for every managed HTTP call, including the Hyperdrive cold reconnect. */
 export const coldResumeRequestTimeoutMilliseconds = 10_000;
 
@@ -20,6 +23,11 @@ export const maximumColdWindowAlignmentWaitMilliseconds = 7 * 60 * 1_000;
 export const maximumManagedProofMilliseconds = 26 * 60 * 1_000;
 
 const cronSafetyMarginMilliseconds = 30_000;
+
+/** Neon uses zero to select its 300-second default suspend timeout. */
+export function effectiveNeonSuspendTimeoutSeconds(configuredSeconds: number): number {
+  return configuredSeconds === 0 ? 5 * 60 : configuredSeconds;
+}
 
 /**
  * Compute the delay needed before observing an uninterrupted Neon idle window.

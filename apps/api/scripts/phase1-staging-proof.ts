@@ -10,7 +10,9 @@ import { Clock, Effect, Exit, Redacted, Schema } from "effect";
 import {
   coldResumeRequestTimeoutMilliseconds,
   coldResumeWaitMilliseconds,
+  effectiveNeonSuspendTimeoutSeconds,
   maximumColdResumeLatencyMilliseconds,
+  maximumProvenNeonSuspendTimeoutSeconds,
   maximumScheduledRecoveryWaitMilliseconds,
 } from "../src/phase1-staging-proof-policy.js";
 
@@ -99,7 +101,7 @@ const NeonEndpointList = Schema.Struct({
       branch_id: Schema.String,
       type: Schema.String,
       current_state: Schema.String,
-      suspend_timeout_seconds: Schema.optional(Schema.Int.pipe(Schema.positive())),
+      suspend_timeout_seconds: Schema.Int.pipe(Schema.between(-1, 604_800)),
     }),
   ),
 });
@@ -494,6 +496,14 @@ function proveAuthenticatedIsolationAndColdResume(environment: ProofEnvironment,
     );
 
     const endpointBeforeIdle = yield* readNeonEndpoint(environment);
+    const effectiveSuspendTimeoutSeconds = effectiveNeonSuspendTimeoutSeconds(
+      endpointBeforeIdle.suspend_timeout_seconds,
+    );
+    yield* requireProof(
+      effectiveSuspendTimeoutSeconds > 0 &&
+        effectiveSuspendTimeoutSeconds <= maximumProvenNeonSuspendTimeoutSeconds,
+      "neon_suspend_timeout_configuration",
+    );
     const currentTime = yield* Clock.currentTimeMillis;
     const preIdleWait = coldResumeWaitMilliseconds(currentTime);
     if (preIdleWait > 0) {
@@ -537,6 +547,7 @@ function proveAuthenticatedIsolationAndColdResume(environment: ProofEnvironment,
       privateWorkspaceCacheControl: true,
       anonymousRedirect: true,
       neonStateBeforeIdle: endpointBeforeIdle.current_state,
+      neonSuspendTimeoutSeconds: effectiveSuspendTimeoutSeconds,
       neonIdleState: idleEndpoint.current_state,
       neonReactivatedState: activeEndpoint.current_state,
       resumeLatencyMilliseconds,

@@ -35,6 +35,7 @@ describe("PostgreSQL migrations", () => {
         [3, "outbox_recovery_policy"],
         [4, "queue_outcome_unknown"],
         [5, "better_auth"],
+        [6, "outbox_consumption_observability"],
       ]);
       expect(secondRun).toEqual([]);
     });
@@ -54,6 +55,7 @@ describe("PostgreSQL migrations", () => {
             readonly canInsertInboundEvents: boolean;
             readonly canInsertOutboxMessages: boolean;
             readonly canInsertOutboxReceipts: boolean;
+            readonly canUpdateOutboxReceiptAttempts: boolean;
             readonly canInsertMigrations: boolean;
             readonly canUpdateOutboxPayload: boolean;
             readonly canUpdateOutboxStatus: boolean;
@@ -73,6 +75,12 @@ describe("PostgreSQL migrations", () => {
                 AS "canUpdateOutboxPayload",
               has_table_privilege(current_user, 'outbox_message_receipts', 'INSERT')
                 AS "canInsertOutboxReceipts",
+              has_column_privilege(
+                current_user,
+                'outbox_message_receipts',
+                'delivery_attempts',
+                'UPDATE'
+              ) AS "canUpdateOutboxReceiptAttempts",
               has_table_privilege(current_user, 'xpensego_migrations', 'INSERT')
                 AS "canInsertMigrations"
           `;
@@ -86,6 +94,7 @@ describe("PostgreSQL migrations", () => {
         canInsertInboundEvents: true,
         canInsertOutboxMessages: true,
         canInsertOutboxReceipts: true,
+        canUpdateOutboxReceiptAttempts: true,
         canInsertMigrations: false,
         canUpdateOutboxPayload: false,
         canUpdateOutboxStatus: true,

@@ -29,6 +29,7 @@ import { Effect, Layer, Redacted, Schema } from "effect";
 
 import { handleApplicationRequest } from "./http.js";
 import { makeOutboxQueuePublicationLayer } from "./outbox-queue-publication.js";
+import { handlePhase1StagingProbe } from "./phase1-staging-probe.js";
 
 const PlatformQueueJobV1 = Schema.Union(PlatformStatusJobV1, OutboxJobV1);
 
@@ -77,7 +78,12 @@ function scheduledInvocationLayer(env: CloudflareBindings) {
   );
 }
 
-function runFetch(request: Request, env: CloudflareBindings): Promise<Response> {
+async function runFetch(request: Request, env: CloudflareBindings): Promise<Response> {
+  const probeResponse = await handlePhase1StagingProbe(request, env);
+  if (probeResponse !== undefined) {
+    return probeResponse;
+  }
+
   if (new URL(request.url).pathname.startsWith("/v1/auth/")) {
     return runAuthenticationFetch(request, env);
   }

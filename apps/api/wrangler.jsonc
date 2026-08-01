@@ -7,7 +7,7 @@
   "workers_dev": true,
   "preview_urls": true,
   "triggers": {
-    "crons": ["*/5 * * * *"],
+    "crons": ["*/10 * * * *"],
   },
   "vars": {
     "ENVIRONMENT": "development",

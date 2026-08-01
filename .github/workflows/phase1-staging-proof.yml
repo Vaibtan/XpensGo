@@ -1,0 +1,46 @@
+name: Phase 1 staging proof
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase1-staging-proof
+  cancel-in-progress: false
+
+jobs:
+  prove:
+    name: Prove deployed staging
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Set up pinned Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22.23.1
+          cache: npm
+
+      - name: Set up pinned npm
+        run: npm install --global npm@10.9.8
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Run managed staging acceptance
+        env:
+          XPENSEGO_MIGRATION_DATABASE_URL: ${{ secrets.XPENSEGO_MIGRATION_DATABASE_URL_STAGING }}
+          XPENSEGO_PHASE1_PROBE_SECRET: ${{ secrets.XPENSEGO_PHASE1_PROBE_SECRET }}
+          XPENSEGO_EXPECTED_REVISION: ${{ github.sha }}
+          NEON_API_KEY: ${{ secrets.XPENSEGO_NEON_API_KEY_STAGING }}
+          XPENSEGO_STAGING_API_URL: https://xpensego-api-staging.vaibhav21296.workers.dev
+          XPENSEGO_STAGING_WEB_URL: https://xpensego-web-staging.vaibhav21296.workers.dev
+          XPENSEGO_NEON_PROJECT_ID: rough-term-42024311
+          XPENSEGO_NEON_BRANCH_ID: br-spring-mud-azz6ko90
+        run: npm run proof:phase1:staging --workspace=@xpensego/api

@@ -30,7 +30,7 @@ const OutboxPublicationStateRow = Schema.Struct({
 
 const OutboxConsumptionRow = Schema.Struct({
   outboxExists: Schema.Boolean,
-  receiptInserted: Schema.Boolean,
+  deliveryAttempts: Schema.NullOr(Schema.Int.pipe(Schema.positive())),
 });
 
 function persistenceUnavailable(
@@ -285,21 +285,28 @@ export const make = Effect.gen(function* () {
           FROM outbox_messages
           WHERE id = ${input.outboxMessageId}
         ),
-        inserted AS (
-          INSERT INTO outbox_message_receipts (outbox_message_id)
-          SELECT id FROM source
-          ON CONFLICT (outbox_message_id) DO NOTHING
-          RETURNING outbox_message_id
+        upserted AS (
+          INSERT INTO outbox_message_receipts (
+            outbox_message_id,
+            delivery_attempts,
+            last_delivered_at
+          )
+          SELECT id, 1, CURRENT_TIMESTAMP FROM source
+          ON CONFLICT (outbox_message_id) DO UPDATE
+          SET
+            delivery_attempts = outbox_message_receipts.delivery_attempts + 1,
+            last_delivered_at = CURRENT_TIMESTAMP
+          RETURNING delivery_attempts
         )
         SELECT
           EXISTS (SELECT 1 FROM source) AS "outboxExists",
-          EXISTS (SELECT 1 FROM inserted) AS "receiptInserted"
+          (SELECT delivery_attempts FROM upserted) AS "deliveryAttempts"
       `;
       const result = yield* Schema.decodeUnknown(OutboxConsumptionRow)(rows[0]);
 
-      return result.receiptInserted
+      return result.deliveryAttempts === 1
         ? ({ _tag: "Processed" } as const)
-        : result.outboxExists
+        : result.deliveryAttempts !== null && result.outboxExists
           ? ({ _tag: "Duplicate" } as const)
           : ({ _tag: "NotFound" } as const);
     });

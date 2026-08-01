@@ -46,6 +46,20 @@ function defectiveRuntimeEnv(): CloudflareBindings {
   return bindings;
 }
 
+const validProbeBindings = {
+  BUILD_REVISION: "0123456789abcdef0123456789abcdef01234567",
+  PHASE1_PROBE_SECRET: "integration-authorization-secret-at-least-32-characters",
+  PHASE1_PROBE_SIGNING_SECRET: "integration-signing-secret-at-least-32-characters",
+} as const;
+
+const validProbeCommand = {
+  operation: "acceptInboundEvent",
+  runId: "unit-run",
+  ownerUserId: "0a37f42e-a007-4d0d-adc2-98098f486ecc",
+  ledgerId: "34502fb7-d5c9-4a30-a480-54c66583240a",
+  otherOwnerUserId: "8ed91076-bdf7-4406-8579-d8031dca3267",
+} as const;
+
 describe("Xpensego API Worker", () => {
   it("serves a versioned status response through the real fetch entrypoint", async () => {
     const response = await SELF.fetch("https://xpensego.test/v1/platform/status", {
@@ -101,6 +115,69 @@ describe("Xpensego API Worker", () => {
         correlationId: platformFixtureIds.correlationId,
       },
     });
+  });
+
+  it("does not expose the staging acceptance driver in development", async () => {
+    const response = await worker.fetch(
+      new Request("https://xpensego.test/_internal/phase1-staging-proof", {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${validProbeBindings.PHASE1_PROBE_SECRET}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(validProbeCommand),
+      }) as Parameters<typeof worker.fetch>[0],
+      {
+        ...env,
+        ...validProbeBindings,
+      },
+      createExecutionContext(),
+    );
+
+    expect(response.status).toBe(404);
+  });
+
+  it("hides the staging acceptance driver when authorization is invalid", async () => {
+    const response = await worker.fetch(
+      new Request("https://xpensego.test/_internal/phase1-staging-proof", {
+        method: "POST",
+        headers: {
+          authorization: "Bearer wrong-secret",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(validProbeCommand),
+      }) as Parameters<typeof worker.fetch>[0],
+      {
+        ...env,
+        ENVIRONMENT: "staging",
+        ...validProbeBindings,
+      },
+      createExecutionContext(),
+    );
+
+    expect(response.status).toBe(404);
+  });
+
+  it("rejects a probe configuration that reuses its authorization secret for signing", async () => {
+    const response = await worker.fetch(
+      new Request("https://xpensego.test/_internal/phase1-staging-proof", {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${validProbeBindings.PHASE1_PROBE_SECRET}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(validProbeCommand),
+      }) as Parameters<typeof worker.fetch>[0],
+      {
+        ...env,
+        ENVIRONMENT: "staging",
+        ...validProbeBindings,
+        PHASE1_PROBE_SIGNING_SECRET: validProbeBindings.PHASE1_PROBE_SECRET,
+      },
+      createExecutionContext(),
+    );
+
+    expect(response.status).toBe(404);
   });
 
   it("acknowledges a database-free job without reading the Hyperdrive binding", async () => {

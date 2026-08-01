@@ -32,6 +32,8 @@ const migrationClientLayer = PgClient.layer({
 const fixtureIds = {
   ownerUserId: Schema.decodeUnknownSync(UserId)("0a37f42e-a007-4d0d-adc2-98098f486ecc"),
   ledgerId: Schema.decodeUnknownSync(LedgerId)("34502fb7-d5c9-4a30-a480-54c66583240a"),
+  otherOwnerUserId: Schema.decodeUnknownSync(UserId)("8ed91076-bdf7-4406-8579-d8031dca3267"),
+  otherLedgerId: Schema.decodeUnknownSync(LedgerId)("3219a7f7-499c-416b-8097-63b5f144ac84"),
   correlationId: "0a07b859-8572-4f11-bc54-36ee65c96ac5",
   externalEventId: Schema.decodeUnknownSync(ExternalChannelEventId)("telegram-update-1"),
 } as const;
@@ -40,7 +42,18 @@ const OutboxState = Schema.Struct({
   status: Schema.Literal("pending", "published", "failed"),
   publishAttempts: Schema.Int.pipe(Schema.nonNegative()),
   receiptCount: Schema.Int.pipe(Schema.nonNegative()),
+  deliveryAttempts: Schema.Int.pipe(Schema.nonNegative()),
   lastPublishErrorCode: Schema.NullOr(Schema.String),
+});
+
+const AcceptanceProbeResult = Schema.Struct({
+  version: Schema.Literal(1),
+  operation: Schema.Literal("acceptInboundEvent"),
+  buildRevision: Schema.Literal("0123456789abcdef0123456789abcdef01234567"),
+  concurrentOutcomes: Schema.Array(Schema.Literal("Accepted", "Duplicate")),
+  acceptedOutboxMessageId: OutboxMessageId,
+  crossOwnerOutcome: Schema.Literal("InboundEventOwnershipMismatch"),
+  redeliveryToken: Schema.String.pipe(Schema.pattern(/^[0-9a-f]{64}$/)),
 });
 
 class RecordingQueue implements Queue<unknown> {
@@ -79,12 +92,18 @@ class RecordingQueue implements Queue<unknown> {
   }
 }
 
-function makeIntegrationEnv(
-  queue: Queue<unknown>,
-): CloudflareBindings & { readonly BETTER_AUTH_SECRET: string } {
+function makeIntegrationEnv(queue: Queue<unknown>): CloudflareBindings & {
+  readonly BETTER_AUTH_SECRET: string;
+  readonly BUILD_REVISION: string;
+  readonly PHASE1_PROBE_SECRET: string;
+  readonly PHASE1_PROBE_SIGNING_SECRET: string;
+} {
   return {
     ...env,
     BETTER_AUTH_SECRET: "integration-test-secret-that-is-at-least-32-characters",
+    BUILD_REVISION: "0123456789abcdef0123456789abcdef01234567",
+    PHASE1_PROBE_SECRET: "phase1-probe-secret-that-is-at-least-32-characters",
+    PHASE1_PROBE_SIGNING_SECRET: "phase1-probe-signing-secret-that-is-at-least-32-characters",
     HYPERDRIVE: {
       ...env.HYPERDRIVE,
       connectionString: Redacted.value(testDatabase.runtimeUrl),
@@ -100,10 +119,15 @@ function makeWorkerRequest(url: string, init?: RequestInit): Parameters<typeof w
 
 const seedAuthority = Effect.gen(function* () {
   const sql = yield* PgClient.PgClient;
-  yield* sql`INSERT INTO users (id) VALUES (${fixtureIds.ownerUserId})`;
+  yield* sql`
+    INSERT INTO users (id)
+    VALUES (${fixtureIds.ownerUserId}), (${fixtureIds.otherOwnerUserId})
+  `;
   yield* sql`
     INSERT INTO ledgers (id, owner_user_id)
-    VALUES (${fixtureIds.ledgerId}, ${fixtureIds.ownerUserId})
+    VALUES
+      (${fixtureIds.ledgerId}, ${fixtureIds.ownerUserId}),
+      (${fixtureIds.otherLedgerId}, ${fixtureIds.otherOwnerUserId})
   `;
 }).pipe(Effect.provide(migrationClientLayer), Effect.scoped);
 
@@ -130,13 +154,15 @@ function readOutboxState(outboxMessageId: string) {
         readonly status: unknown;
         readonly publishAttempts: unknown;
         readonly receiptCount: unknown;
+        readonly deliveryAttempts: unknown;
         readonly lastPublishErrorCode: unknown;
       }>`
         SELECT
           message.status,
           message.publish_attempts AS "publishAttempts",
           message.last_publish_error_code AS "lastPublishErrorCode",
-          COUNT(receipt.outbox_message_id)::integer AS "receiptCount"
+          COUNT(receipt.outbox_message_id)::integer AS "receiptCount",
+          COALESCE(MAX(receipt.delivery_attempts), 0)::integer AS "deliveryAttempts"
         FROM outbox_messages AS message
         LEFT JOIN outbox_message_receipts AS receipt
           ON receipt.outbox_message_id = message.id
@@ -164,6 +190,116 @@ afterEach(async () => {
 });
 
 describe("API Worker outbox integration", () => {
+  it("drives concurrent acceptance and recoverable Queue delivery through the staging probe", async () => {
+    const queue = new RecordingQueue();
+    const probeEnv = {
+      ...makeIntegrationEnv(queue),
+      ENVIRONMENT: "staging" as const,
+    };
+    const authorization = `Bearer ${probeEnv.PHASE1_PROBE_SECRET}`;
+    const probeUrl = `${probeEnv.PUBLIC_WEB_ORIGIN}/_internal/phase1-staging-proof`;
+    const callProbe = (body: unknown) =>
+      worker.fetch(
+        makeWorkerRequest(probeUrl, {
+          method: "POST",
+          headers: { authorization, "content-type": "application/json" },
+          body: JSON.stringify(body),
+        }),
+        probeEnv,
+        createExecutionContext(),
+      );
+
+    const acceptanceResponse = await callProbe({
+      operation: "acceptInboundEvent",
+      runId: "integration-run",
+      ownerUserId: fixtureIds.ownerUserId,
+      ledgerId: fixtureIds.ledgerId,
+      otherOwnerUserId: fixtureIds.otherOwnerUserId,
+    });
+    const acceptance = Schema.decodeUnknownSync(AcceptanceProbeResult)(
+      await acceptanceResponse.json(),
+    );
+
+    expect(acceptanceResponse.status).toBe(200);
+    expect(acceptance.concurrentOutcomes).toEqual(["Accepted", "Duplicate"]);
+    expect(acceptance.crossOwnerOutcome).toBe("InboundEventOwnershipMismatch");
+
+    const tamperedCapabilityResponse = await callProbe({
+      operation: "redeliverOutbox",
+      runId: "integration-run",
+      outboxMessageId: "bdc02069-e8a1-4e88-863b-8f04e1c2a115",
+      redeliveryToken: acceptance.redeliveryToken,
+    });
+    expect(tamperedCapabilityResponse.status).toBe(400);
+    expect(queue.messages).toHaveLength(0);
+
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const sql = yield* PgClient.PgClient;
+        yield* sql`
+          UPDATE outbox_messages
+          SET
+            publish_attempts = 1,
+            last_publish_error_code = 'queue_unavailable',
+            next_publish_attempt_at = CURRENT_TIMESTAMP
+          WHERE id = ${acceptance.acceptedOutboxMessageId}
+        `;
+      }).pipe(Effect.provide(migrationClientLayer), Effect.scoped),
+    );
+
+    await runScheduled(queue);
+    expect(queue.messages).toHaveLength(1);
+
+    const firstDelivery = createMessageBatch("xpensego-platform-jobs-staging", [
+      {
+        id: "phase1-proof-delivery-1",
+        timestamp: new Date("2026-08-01T00:00:00.000Z"),
+        attempts: 1,
+        body: queue.messages[0],
+      },
+    ]);
+    const firstDeliveryContext = createExecutionContext();
+    await worker.queue(firstDelivery, probeEnv, firstDeliveryContext);
+    const firstDeliveryResult = await getQueueResult(firstDelivery, firstDeliveryContext);
+
+    expect(firstDeliveryResult.ackAll).toBe(false);
+    expect(firstDeliveryResult.explicitAcks).toEqual(["phase1-proof-delivery-1"]);
+    expect(await readOutboxState(acceptance.acceptedOutboxMessageId)).toEqual({
+      status: "published",
+      publishAttempts: 2,
+      receiptCount: 1,
+      deliveryAttempts: 1,
+      lastPublishErrorCode: null,
+    });
+
+    const redeliveryResponse = await callProbe({
+      operation: "redeliverOutbox",
+      runId: "integration-run",
+      outboxMessageId: acceptance.acceptedOutboxMessageId,
+      redeliveryToken: acceptance.redeliveryToken,
+    });
+    expect(redeliveryResponse.status).toBe(200);
+    expect(queue.messages).toHaveLength(2);
+
+    const secondDelivery = createMessageBatch("xpensego-platform-jobs-staging", [
+      {
+        id: "phase1-proof-delivery-2",
+        timestamp: new Date("2026-08-01T00:00:30.000Z"),
+        attempts: 2,
+        body: queue.messages[1],
+      },
+    ]);
+    const secondDeliveryContext = createExecutionContext();
+    await worker.queue(secondDelivery, probeEnv, secondDeliveryContext);
+    const secondDeliveryResult = await getQueueResult(secondDelivery, secondDeliveryContext);
+
+    expect(secondDeliveryResult.explicitAcks).toEqual(["phase1-proof-delivery-2"]);
+    expect(await readOutboxState(acceptance.acceptedOutboxMessageId)).toMatchObject({
+      receiptCount: 1,
+      deliveryAttempts: 2,
+    });
+  });
+
   it("creates and resolves a Better Auth session through the Worker boundary", async () => {
     const integrationEnv = makeIntegrationEnv(new RecordingQueue());
     const origin = integrationEnv.PUBLIC_WEB_ORIGIN;
@@ -245,6 +381,7 @@ describe("API Worker outbox integration", () => {
       status: "published",
       publishAttempts: 1,
       receiptCount: 1,
+      deliveryAttempts: 2,
       lastPublishErrorCode: null,
     });
 
@@ -284,6 +421,7 @@ describe("API Worker outbox integration", () => {
       status: "pending",
       publishAttempts: 1,
       receiptCount: 0,
+      deliveryAttempts: 0,
       lastPublishErrorCode: "queue_unavailable",
     });
 
@@ -305,6 +443,7 @@ describe("API Worker outbox integration", () => {
       status: "published",
       publishAttempts: 2,
       receiptCount: 0,
+      deliveryAttempts: 0,
       lastPublishErrorCode: null,
     });
   });

@@ -218,13 +218,14 @@ describe("PostgreSQL outbox persistence", () => {
           if (claimed === undefined) {
             return yield* Effect.die("Expected one claimed outbox message");
           }
-          const firstConsumption = yield* persistence.recordConsumption({
-            outboxMessageId: claimed.outboxMessageId,
-          });
+          const [firstConsumption, secondConsumption] = yield* Effect.all(
+            [
+              persistence.recordConsumption({ outboxMessageId: claimed.outboxMessageId }),
+              persistence.recordConsumption({ outboxMessageId: claimed.outboxMessageId }),
+            ],
+            { concurrency: 2 },
+          );
           const afterReceipt = yield* persistence.claimPending(claimPolicy);
-          const secondConsumption = yield* persistence.recordConsumption({
-            outboxMessageId: claimed.outboxMessageId,
-          });
           const missingConsumption = yield* persistence.recordConsumption({
             outboxMessageId: Schema.decodeUnknownSync(OutboxMessageId)(
               "ec1c9cd9-cc6b-48a2-90ab-8d298281736c",
@@ -240,12 +241,26 @@ describe("PostgreSQL outbox persistence", () => {
         }).pipe(Effect.provide(outboxPersistenceLayer), Effect.scoped),
       );
 
-      expect(result.firstConsumption).toEqual({ _tag: "Processed" });
-      expect(result.secondConsumption).toEqual({ _tag: "Duplicate" });
+      expect([result.firstConsumption._tag, result.secondConsumption._tag].toSorted()).toEqual([
+        "Duplicate",
+        "Processed",
+      ]);
       expect(result.missingConsumption).toEqual({ _tag: "NotFound" });
       expect(result.afterReceipt.map((message) => message.outboxMessageId)).not.toContain(
         result.claimed.outboxMessageId,
       );
+
+      const [receipt] = await Effect.runPromise(
+        Effect.gen(function* () {
+          const sql = yield* PgClient.PgClient;
+          return yield* sql<{ readonly deliveryAttempts: number }>`
+            SELECT delivery_attempts AS "deliveryAttempts"
+            FROM outbox_message_receipts
+            WHERE outbox_message_id = ${result.claimed.outboxMessageId}
+          `;
+        }).pipe(Effect.provide(migrationClientLayer), Effect.scoped),
+      );
+      expect(receipt?.deliveryAttempts).toBe(2);
     });
   });
 

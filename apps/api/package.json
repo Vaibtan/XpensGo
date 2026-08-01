@@ -7,9 +7,10 @@
     "build": "wrangler deploy --dry-run --env=\"\" --outdir dist",
     "deploy:staging": "wrangler deploy --env staging",
     "dev": "wrangler dev",
+    "proof:phase1:staging": "tsx scripts/phase1-staging-proof.ts",
     "test": "vitest run",
     "test:integration": "vitest run --config vitest.integration.config.ts",
-    "typecheck": "npm run types && tsc --noEmit",
+    "typecheck": "npm run types && tsc --noEmit && tsc --noEmit -p tsconfig.scripts.json",
     "types": "wrangler types --env-interface CloudflareBindings"
   },
   "dependencies": {
@@ -25,6 +26,7 @@
     "@xpensego/config": "0.1.0",
     "@xpensego/testing": "0.1.0",
     "typescript": "6.0.3",
+    "tsx": "4.23.1",
     "vitest": "4.1.10",
     "wrangler": "4.116.0"
   }

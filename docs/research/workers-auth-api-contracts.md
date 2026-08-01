@@ -2,7 +2,7 @@
 
 **Issue:** [#6](https://github.com/Vaibtan/XpensGo/issues/6)  
 **Researched:** 2026-08-01  
-**Status:** accepted as architectural input by [ADR 0004](../adr/0004-better-auth-effect-http-api.md); implementation and provider-backed evidence remain open
+**Status:** accepted as architectural input by [ADR 0004](../adr/0004-better-auth-effect-http-api.md); the implemented Phase 1 provider-backed boundary is recorded in the [staging evidence](../evidence/phase1-staging.md), while recovery-email delivery remains open
 
 ## Decision summary
 

@@ -49,4 +49,4 @@ compatible with Cloudflare Hyperdrive, and its scoped Layer owns pool cleanup.
 - The first migration establishes only ownership, inbound idempotency, and the
   transactional outbox records needed for the Phase 1 proof. Broader Phase 2
   tables are added with the feature that owns them.
-- Choosing an authentication provider remains a separate Phase 1 decision.
+- Authentication schema ownership was subsequently resolved by [ADR 0004](./0004-better-auth-effect-http-api.md).

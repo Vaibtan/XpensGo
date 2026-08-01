@@ -258,13 +258,13 @@ The product records, without placing financial contents in analytics payloads:
 
 The [Product Document's deferred scope and research interpretation](./xpensego-product-doc.md#8-explicitly-deferred) own the evidence gates. These identifiers reserve traceability without committing delivery:
 
-| Requirement | Status | Constraint if later promoted |
-| --- | --- | --- |
-| FR-22 Shared ledgers | **[POST-SIGNAL]** | Requires an approved experiment covering isolation, personal rollups, and acquisition or retention value. |
-| FR-23 Recurring-expense detection | **[POST-SIGNAL]** | Requires sufficient longitudinal data and user confirmation of candidates. |
-| FR-24 Tax-oriented exports | **[POST-SIGNAL]** | Requires direct demand evidence and must not imply tax correctness. |
-| FR-25 Account Aggregator connectivity | **[POST-SIGNAL]** | Begins with partner, regulatory, consent, coverage, and unit-economics discovery. |
-| FR-26 Deferred expansion | **[HOLD]** | Remains outside committed scope until the product authority changes. |
+| Requirement                           | Status            | Constraint if later promoted                                                                              |
+| ------------------------------------- | ----------------- | --------------------------------------------------------------------------------------------------------- |
+| FR-22 Shared ledgers                  | **[POST-SIGNAL]** | Requires an approved experiment covering isolation, personal rollups, and acquisition or retention value. |
+| FR-23 Recurring-expense detection     | **[POST-SIGNAL]** | Requires sufficient longitudinal data and user confirmation of candidates.                                |
+| FR-24 Tax-oriented exports            | **[POST-SIGNAL]** | Requires direct demand evidence and must not imply tax correctness.                                       |
+| FR-25 Account Aggregator connectivity | **[POST-SIGNAL]** | Begins with partner, regulatory, consent, coverage, and unit-economics discovery.                         |
+| FR-26 Deferred expansion              | **[HOLD]**        | Remains outside committed scope until the product authority changes.                                      |
 
 ## 14. Non-functional requirements
 
@@ -325,7 +325,7 @@ Release and roadmap decisions use the [Product Document's success gates](./xpens
 
 Product-level decisions, including pricing and category-product policy, live in the [Product Document](./xpensego-product-doc.md#14-open-product-decisions).
 
-- Exact authentication and account-recovery experience.
+- Exact email-verification, password-reset, recovery-delivery, and recent-reauthentication experience within the selected Better Auth architecture.
 - Import file-size and row-count limits after performance measurement.
 - Undo retention and source-record retention periods.
 - The initial notification-detail default.

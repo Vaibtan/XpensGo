@@ -41,6 +41,18 @@ owns the runtime credential; it is not duplicated in Worker secrets or the
 repository. Migrations use `xpensego_migrator` over a direct connection with
 `sslmode=verify-full`. Those URLs are stored only as the encrypted GitHub
 repository secrets `XPENSEGO_MIGRATION_DATABASE_URL_DEVELOPMENT` and
-`XPENSEGO_MIGRATION_DATABASE_URL_STAGING`. A future migration workflow must map
-the selected environment secret to `XPENSEGO_MIGRATION_DATABASE_URL` for the
-migration command.
+`XPENSEGO_MIGRATION_DATABASE_URL_STAGING`. The
+[managed migration workflow](./.github/workflows/managed-migrations.yml) maps
+the selected secret to `XPENSEGO_MIGRATION_DATABASE_URL`; application deploys
+never run migrations implicitly.
+
+The verified staging deploy is `npm run deploy:staging:verified`. It rejects
+uncommitted deployment inputs, deploys both Workers from one Git revision, and
+stamps that revision into both runtimes. The
+[Phase 1 acceptance workflow](./.github/workflows/phase1-staging-proof.yml)
+additionally uses `XPENSEGO_PHASE1_PROBE_SECRET` and the project-scoped
+`XPENSEGO_NEON_API_KEY_STAGING`. The probe signing secret exists only in the
+staging API Worker. Secret values must not be copied into local files, workflow
+inputs, logs, or documentation. See the
+[Phase 1 staging report](./docs/evidence/phase1-staging.md) for the completed
+provider-backed proof.

@@ -27,11 +27,11 @@ When documents conflict, product intent in the Product Document governs the PRD,
 
 ## Current repository state
 
-The replacement implementation has started under `apps/` and `packages/`. It currently contains the pinned Next.js/OpenNext web shell, an Effect-based API Worker with real `fetch`, Queue, and scheduled execution boundaries, versioned contracts, validated runtime configuration, content-minimized correlation/job telemetry, strict shared tooling, and Worker-runtime tests. The PostgreSQL foundation adds forward-only Effect SQL migrations, separate migration and runtime roles, ownership constraints, inbound-event idempotency, bounded outbox publication and stalled-consumer recovery, terminal operator retry, and duplicate-safe consumer receipts with real-database integration tests. Separate Neon development and staging projects, cache-disabled Hyperdrive bindings, Cloudflare Queues, and deployed API/OpenNext Workers are provisioned; applying outbox migrations 0002–0003 and proving the Hyperdrive-to-Queue path in staging, authentication, and Telegram behavior remain open. The current tracer is not a user-ready product.
+Phase 1 of the replacement implementation is complete under `apps/` and `packages/`. The pinned Next.js/OpenNext web Worker, Effect API Worker, self-hosted Better Auth seam, forward-only Effect SQL migrations, least-privilege Neon roles, cache-disabled Hyperdrive binding, Cron dispatcher, Cloudflare Queue, and duplicate-safe outbox consumer are proven together in staging. The measured evidence and its limits are recorded in the [Phase 1 staging report](./docs/evidence/phase1-staging.md). Telegram behavior, recovery email, the product ledger workflow, and production readiness remain open; this platform tracer is not a user-ready product.
 
 The Python bot, local SQLite database, and original D1 Cloudflare Worker remain hackathon experiments. They are useful as behavioral references and test fixtures but are not reused as the production runtime. Legacy artifacts should remain intact until the replacement reproduces the intended behavior and any retained data has been audited.
 
-The waitlist site and its setup material are separate acquisition assets. The root `SETUP.md` and `XpensGo Waitlist/` directory apply to that waitlist, not to the new application runtime.
+The waitlist site remains a separate acquisition asset with its own setup material under `XpensGo Waitlist/`. Root [`SETUP.md`](./SETUP.md) owns replacement-application environment and managed-resource setup and links to the legacy waitlist instructions when needed.
 
 ## Local PostgreSQL workflow
 

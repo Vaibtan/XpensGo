@@ -105,7 +105,7 @@ The initial change may introduce `apps/` and `packages/` without immediately mov
 - `Context` services and `Layer` composition define dependencies and resource lifecycles. The same dependency must not also be represented by a second service-locator or dependency-injection system.
 - Expected failures use typed error families such as validation, authorization, not-found, conflict, rate-limit, and transient-provider errors. Defects are logged and surfaced as safe internal failures.
 - HTTP, queue, and Workflow entrypoints own error-to-status, attempt-level retry, acknowledgement, and telemetry mapping.
-- Secrets and sensitive configuration use Effect configuration and redacted values backed by Cloudflare secret bindings. Secret values never appear in logs or error serialization.
+- Secrets and sensitive configuration use Effect configuration and redacted values backed by Cloudflare secret bindings. Secret values never appear in application-emitted logs or error serialization; provider-managed invocation diagnostics are a separately restricted operational surface.
 - Retries, timeouts, and concurrency limits are explicit and apply only to classified transient work. Validation, authorization, conflict, invariant, and ambiguous external-outcome failures are not retried blindly.
 - A cached Effect runtime may contain only pure or stateless modules, validated static configuration, and factories for invocation-scoped adapters. `ActorContext`, correlation data, request values, mutable state, database clients, and scoped resources are constructed and finalized inside each `fetch`, `queue`, scheduled, or Workflow invocation and are never retained globally.
 - `Effect.runPromise` or equivalent execution is confined to entrypoint adapters. Domain and application modules return Effect values.
@@ -510,6 +510,8 @@ Models may assist with:
 
 The model gateway Effect service accepts a stable operation identifier, versioned operation, and output schema, and returns structured output plus usage metadata or a typed outcome. It hides provider request formats from domain modules.
 
+The Vercel AI SDK may be selected later as an implementation detail inside a provider adapter after the Phase 2 model decision. It is not installed as a fallback, does not define domain or application interfaces, and cannot bypass the Model Gateway's Effect service, schema, cost, retry, or persistence policies.
+
 Requirements:
 
 - strict structured outputs for mutations and query slots;
@@ -565,7 +567,7 @@ Evaluation reports extraction accuracy by field and source format. A single aggr
 ## 13. Security and privacy
 
 - Environment bindings and configuration are validated when the live Effect Layer is constructed.
-- Secrets never enter source control, client bundles, logs, job payloads, or error responses.
+- Secrets never enter source control, client bundles, application-emitted logs, job payloads, or error responses. Provider-managed invocation diagnostics that receive original request metadata require least-privilege access, minimal retention, and no unapproved downstream export before production.
 - Secrets are supplied through Cloudflare secret bindings or Secrets Store and represented as redacted values inside application code.
 - Authentication cookies are secure, HTTP-only, same-site as the selected flow permits, and all cookie-authenticated mutations enforce origin and cross-site request-forgery protection.
 - Webhook verification happens before parsing expensive payloads.

@@ -5,8 +5,14 @@ import {
 } from "@xpensego/adapters/cloudflare/runtime-config";
 import { makePostgresOutboxPersistenceLayer } from "@xpensego/adapters/postgres/outbox-store";
 import { CorrelationId } from "@xpensego/contracts/platform/correlation-id";
-import { OutboxJobV1 } from "@xpensego/contracts/platform/outbox-job";
-import { PlatformStatusJobV1 } from "@xpensego/contracts/platform/platform-status-job";
+import {
+  OutboxJobV1,
+  type OutboxJobV1 as OutboxQueueJob,
+} from "@xpensego/contracts/platform/outbox-job";
+import {
+  PlatformStatusJobV1,
+  type PlatformStatusJobV1 as PlatformStatusQueueJob,
+} from "@xpensego/contracts/platform/platform-status-job";
 import {
   dispatchPendingOutbox,
   recordOutboxConsumption,
@@ -108,6 +114,13 @@ function queueInvocationLayer(env: CloudflareBindings) {
   );
 }
 
+function outboxQueueInvocationLayer(env: CloudflareBindings) {
+  return Layer.merge(
+    consoleRuntimeTelemetryLayer,
+    makePostgresOutboxPersistenceLayer(Redacted.make(env.HYPERDRIVE.connectionString)),
+  );
+}
+
 function scheduledInvocationLayer(env: CloudflareBindings) {
   return Layer.merge(
     queueInvocationLayer(env),
@@ -181,25 +194,28 @@ function runFetch(request: Request, env: CloudflareBindings): Promise<Response> 
   return Effect.runPromise(program);
 }
 
-const processQueueMessage = Effect.fn("Api.processQueueMessage")(function* (
+const decodeQueueMessage = Effect.fn("Api.decodeQueueMessage")(function* (
   message: Message<unknown>,
 ) {
-  const job = yield* Schema.decodeUnknown(PlatformQueueJobV1)(message.body, {
+  return yield* Schema.decodeUnknown(PlatformQueueJobV1)(message.body, {
     onExcessProperty: "error",
   }).pipe(Effect.mapError(() => new InvalidPlatformQueueJob({ messageId: message.id })));
+});
 
-  if (job.kind === "platform.status.requested") {
-    yield* readPlatformStatus({ correlationId: job.correlationId });
-    const telemetry = yield* RuntimeTelemetry;
-    yield* telemetry.emit({
-      _tag: "PlatformStatusJobProcessed",
-      correlationId: job.correlationId,
-      jobId: job.jobId,
-      outcome: "processed",
-    });
-    return;
-  }
+const processPlatformStatusJob = Effect.fn("Api.processPlatformStatusJob")(function* (
+  job: PlatformStatusQueueJob,
+) {
+  yield* readPlatformStatus({ correlationId: job.correlationId });
+  const telemetry = yield* RuntimeTelemetry;
+  yield* telemetry.emit({
+    _tag: "PlatformStatusJobProcessed",
+    correlationId: job.correlationId,
+    jobId: job.jobId,
+    outcome: "processed",
+  });
+});
 
+const processOutboxJob = Effect.fn("Api.processOutboxJob")(function* (job: OutboxQueueJob) {
   yield* recordOutboxConsumption({
     outboxMessageId: job.outboxMessageId,
     correlationId: job.correlationId,
@@ -210,13 +226,9 @@ function queueRetryDelaySeconds(attempts: number): number {
   return Math.min(30 * 2 ** Math.min(Math.max(attempts - 1, 0), 4), 300);
 }
 
-function processQueueMessageAtBoundary(message: Message<unknown>, queueName: string) {
-  return processQueueMessage(message).pipe(
-    Effect.tap(() =>
-      Effect.sync(() => {
-        message.ack();
-      }),
-    ),
+function decodeQueueMessageAtBoundary(message: Message<unknown>, queueName: string) {
+  return decodeQueueMessage(message).pipe(
+    Effect.map((job) => ({ message, job })),
     Effect.catchTag("InvalidPlatformQueueJob", (error) =>
       Effect.sync(() => {
         message.ack();
@@ -229,6 +241,50 @@ function processQueueMessageAtBoundary(message: Message<unknown>, queueName: str
             queue: queueName,
           }),
         );
+        return null;
+      }),
+    ),
+  );
+}
+
+function processPlatformStatusMessageAtBoundary(
+  message: Message<unknown>,
+  queueName: string,
+  job: PlatformStatusQueueJob,
+) {
+  return processPlatformStatusJob(job).pipe(
+    Effect.tap(() =>
+      Effect.sync(() => {
+        message.ack();
+      }),
+    ),
+    Effect.catchAllCause((cause) =>
+      Effect.sync(() => {
+        message.retry({ delaySeconds: queueRetryDelaySeconds(message.attempts) });
+        // oxlint-disable-next-line no-console -- Unexpected message failures retry only the affected Queue message.
+        console.error(
+          JSON.stringify({
+            event: "UnhandledQueueMessageFailure",
+            messageId: message.id,
+            queue: queueName,
+            attempts: message.attempts,
+            causeTag: cause._tag,
+          }),
+        );
+      }),
+    ),
+  );
+}
+
+function processOutboxMessageAtBoundary(
+  message: Message<unknown>,
+  queueName: string,
+  job: OutboxQueueJob,
+) {
+  return processOutboxJob(job).pipe(
+    Effect.tap(() =>
+      Effect.sync(() => {
+        message.ack();
       }),
     ),
     Effect.catchTag("OutboxPersistenceUnavailable", (error) =>
@@ -264,26 +320,98 @@ function processQueueMessageAtBoundary(message: Message<unknown>, queueName: str
   );
 }
 
+interface QueueMessageWithJob<Job> {
+  readonly message: Message<unknown>;
+  readonly job: Job;
+}
+
+function retryQueueMessagesAfterLayerFailure(
+  messages: ReadonlyArray<QueueMessageWithJob<unknown>>,
+  queueName: string,
+  event: "OutboxQueueJobDeferred" | "PlatformStatusQueueJobDeferred",
+  errorTag: string,
+) {
+  return Effect.sync(() => {
+    for (const { message } of messages) {
+      message.retry({ delaySeconds: queueRetryDelaySeconds(message.attempts) });
+      // oxlint-disable-next-line no-console -- Layer failures are logged without Queue contents or provider details.
+      console.error(
+        JSON.stringify({
+          event,
+          errorTag,
+          messageId: message.id,
+          queue: queueName,
+          attempts: message.attempts,
+        }),
+      );
+    }
+  });
+}
+
 function runQueue(batch: MessageBatch<unknown>, env: CloudflareBindings): Promise<void> {
-  const program = Effect.forEach(
-    batch.messages,
-    (message) => processQueueMessageAtBoundary(message, batch.queue),
-    {
-      concurrency: 5,
-      discard: true,
-    },
-  ).pipe(
-    Effect.provide(queueInvocationLayer(env)),
-    Effect.catchTag("InvalidRuntimeConfig", () =>
-      Effect.sync(() => {
-        batch.retryAll({ delaySeconds: 5 });
-      }),
-    ),
-    Effect.catchTag("OutboxPersistenceUnavailable", () =>
-      Effect.sync(() => {
-        batch.retryAll({ delaySeconds: 5 });
-      }),
-    ),
+  const program = Effect.gen(function* () {
+    const decodedMessages = yield* Effect.forEach(
+      batch.messages,
+      (message) => decodeQueueMessageAtBoundary(message, batch.queue),
+      { concurrency: 5 },
+    );
+    const platformStatusMessages: Array<QueueMessageWithJob<PlatformStatusQueueJob>> = [];
+    const outboxMessages: Array<QueueMessageWithJob<OutboxQueueJob>> = [];
+
+    for (const decodedMessage of decodedMessages) {
+      if (decodedMessage === null) {
+        continue;
+      }
+
+      if (decodedMessage.job.kind === "platform.status.requested") {
+        platformStatusMessages.push({
+          message: decodedMessage.message,
+          job: decodedMessage.job,
+        });
+      } else {
+        outboxMessages.push({
+          message: decodedMessage.message,
+          job: decodedMessage.job,
+        });
+      }
+    }
+
+    if (platformStatusMessages.length > 0) {
+      yield* Effect.forEach(
+        platformStatusMessages,
+        ({ message, job }) => processPlatformStatusMessageAtBoundary(message, batch.queue, job),
+        { concurrency: 5, discard: true },
+      ).pipe(
+        Effect.provide(invocationLayer(env)),
+        Effect.catchTag("InvalidRuntimeConfig", (error) =>
+          retryQueueMessagesAfterLayerFailure(
+            platformStatusMessages,
+            batch.queue,
+            "PlatformStatusQueueJobDeferred",
+            error._tag,
+          ),
+        ),
+      );
+    }
+
+    if (outboxMessages.length > 0) {
+      yield* Effect.forEach(
+        outboxMessages,
+        ({ message, job }) => processOutboxMessageAtBoundary(message, batch.queue, job),
+        { concurrency: 5, discard: true },
+      ).pipe(
+        Effect.provide(outboxQueueInvocationLayer(env)),
+        Effect.catchTag("OutboxPersistenceUnavailable", (error) =>
+          retryQueueMessagesAfterLayerFailure(
+            outboxMessages,
+            batch.queue,
+            "OutboxQueueJobDeferred",
+            error._tag,
+          ),
+        ),
+      );
+    }
+  }).pipe(
     Effect.catchAllCause((cause) =>
       Effect.sync(() => {
         batch.retryAll({ delaySeconds: 5 });

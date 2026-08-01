@@ -23,7 +23,7 @@
     "dev": "turbo run dev --parallel --cache-dir=node_modules/.cache/turbo",
     "format": "prettier --write .github apps packages scripts docs/adr compose.yaml package.json tsconfig.json turbo.json oxlint.json prettier.config.mjs",
     "format:check": "prettier --check .github apps packages scripts docs/adr compose.yaml package.json tsconfig.json turbo.json oxlint.json prettier.config.mjs",
-    "lint": "oxlint --deny-warnings --type-aware --type-check apps packages scripts",
+    "lint": "npm run types:api && oxlint --deny-warnings --type-aware --type-check apps packages scripts",
     "test": "npm run test:audit-policy && turbo run test --cache-dir=node_modules/.cache/turbo",
     "test:audit-policy": "node --test scripts/dependency-audit-policy.test.mjs",
     "test:integration": "npm run test:integration --workspace=@xpensego/adapters && npm run test:integration --workspace=@xpensego/api",

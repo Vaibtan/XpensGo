@@ -12,6 +12,28 @@ import { describe, expect, it } from "vitest";
 
 import worker from "./index.js";
 
+function unavailableDatabaseEnv(): CloudflareBindings {
+  return {
+    ...env,
+    HYPERDRIVE: {
+      ...env.HYPERDRIVE,
+      connectionString: "postgresql://xpensego_runtime:unavailable@127.0.0.1:1/xpensego",
+    },
+  };
+}
+
+function databaseForbiddenEnv(): CloudflareBindings {
+  const bindings: CloudflareBindings = { ...env };
+
+  Object.defineProperty(bindings, "HYPERDRIVE", {
+    get() {
+      throw new Error("A database-free Queue job must not read the Hyperdrive binding.");
+    },
+  });
+
+  return bindings;
+}
+
 describe("Xpensego API Worker", () => {
   it("serves a versioned status response through the real fetch entrypoint", async () => {
     const response = await SELF.fetch("https://xpensego.test/v1/platform/status", {
@@ -49,7 +71,7 @@ describe("Xpensego API Worker", () => {
     });
   });
 
-  it("acknowledges a valid versioned job through the real queue entrypoint", async () => {
+  it("acknowledges a database-free job without reading the Hyperdrive binding", async () => {
     const batch = createMessageBatch("xpensego-platform-jobs-development", [
       {
         id: "queue-message-1",
@@ -65,7 +87,7 @@ describe("Xpensego API Worker", () => {
     ]);
     const context = createExecutionContext();
 
-    await worker.queue(batch, env, context);
+    await worker.queue(batch, databaseForbiddenEnv(), context);
 
     const result = await getQueueResult(batch, context);
     expect(result.explicitAcks).toEqual(["queue-message-1"]);
@@ -105,7 +127,44 @@ describe("Xpensego API Worker", () => {
     expect(result.explicitAcks).toEqual(["invalid-message", "valid-message"]);
   });
 
-  it("retries the batch when its PostgreSQL persistence Layer is unavailable", async () => {
+  it("acks a database-free job while retrying only an unavailable outbox job", async () => {
+    const batch = createMessageBatch("xpensego-platform-jobs-development", [
+      {
+        id: "status-message",
+        timestamp: new Date("2026-07-31T00:00:00.000Z"),
+        attempts: 1,
+        body: {
+          version: 1,
+          kind: "platform.status.requested",
+          jobId: platformFixtureIds.jobId,
+          correlationId: platformFixtureIds.correlationId,
+        },
+      },
+      {
+        id: "outbox-message",
+        timestamp: new Date("2026-07-31T00:00:00.000Z"),
+        attempts: 1,
+        body: {
+          version: 1,
+          kind: "outbox.message.ready",
+          outboxMessageId: Schema.decodeUnknownSync(OutboxMessageId)(
+            "98b2ea19-c24e-49a3-a808-f39667b3c32e",
+          ),
+          correlationId: platformFixtureIds.correlationId,
+        },
+      },
+    ]);
+    const context = createExecutionContext();
+
+    await worker.queue(batch, unavailableDatabaseEnv(), context);
+
+    const result = await getQueueResult(batch, context);
+    expect(result.retryBatch).toEqual({ retry: false });
+    expect(result.explicitAcks).toEqual(["status-message"]);
+    expect(result.retryMessages).toEqual([{ msgId: "outbox-message" }]);
+  });
+
+  it("retries only the outbox message when its PostgreSQL Layer is unavailable", async () => {
     const batch = createMessageBatch("xpensego-platform-jobs-development", [
       {
         id: "unavailable-outbox-message",
@@ -122,18 +181,11 @@ describe("Xpensego API Worker", () => {
       },
     ]);
     const context = createExecutionContext();
-    const unavailableDatabaseEnv: CloudflareBindings = {
-      ...env,
-      HYPERDRIVE: {
-        ...env.HYPERDRIVE,
-        connectionString: "postgresql://xpensego_runtime:unavailable@127.0.0.1:1/xpensego",
-      },
-    };
-
-    await worker.queue(batch, unavailableDatabaseEnv, context);
+    await worker.queue(batch, unavailableDatabaseEnv(), context);
 
     const result = await getQueueResult(batch, context);
-    expect(result.retryBatch).toEqual({ retry: true });
+    expect(result.retryBatch).toEqual({ retry: false });
     expect(result.explicitAcks).toEqual([]);
+    expect(result.retryMessages).toEqual([{ msgId: "unavailable-outbox-message" }]);
   });
 });

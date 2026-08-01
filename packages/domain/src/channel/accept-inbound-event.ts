@@ -65,10 +65,10 @@ export class InboundEventPersistenceUnavailable extends Schema.TaggedError<Inbou
   "InboundEventPersistenceUnavailable",
   {
     operation: Schema.Literal("connectInboundEventStore", "persistInboundEvent"),
-    cause: Schema.Unknown,
+    reason: Schema.Literal("database_unavailable"),
   },
 ) {
-  /** Safe description that leaves raw provider detail in the structured cause. */
+  /** Safe description that does not expose database or driver detail. */
   override get message(): string {
     return "Inbound event persistence is unavailable";
   }
@@ -117,7 +117,7 @@ export const acceptInboundEvent = Effect.fn("Channel.acceptInboundEvent")(functi
 ) {
   const store = yield* InboundEventStore;
   const idempotencyKey = InboundEventIdempotencyKey.make(
-    `${input.channel}:${input.externalEventId}`,
+    `acceptInboundEvent:${input.ownerUserId}:${input.channel}:${input.externalEventId}`,
   );
 
   return yield* store.persist({

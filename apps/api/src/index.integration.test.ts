@@ -79,15 +79,23 @@ class RecordingQueue implements Queue<unknown> {
   }
 }
 
-function makeIntegrationEnv(queue: Queue<unknown>): CloudflareBindings {
+function makeIntegrationEnv(
+  queue: Queue<unknown>,
+): CloudflareBindings & { readonly BETTER_AUTH_SECRET: string } {
   return {
     ...env,
+    BETTER_AUTH_SECRET: "integration-test-secret-that-is-at-least-32-characters",
     HYPERDRIVE: {
       ...env.HYPERDRIVE,
       connectionString: Redacted.value(testDatabase.runtimeUrl),
     },
     PLATFORM_JOBS_QUEUE: queue,
   };
+}
+
+function makeWorkerRequest(url: string, init?: RequestInit): Parameters<typeof worker.fetch>[0] {
+  // SAFETY: the Workers test pool constructs the same runtime Request but exposes a wider cf generic.
+  return new Request(url, init) as Parameters<typeof worker.fetch>[0];
 }
 
 const seedAuthority = Effect.gen(function* () {
@@ -156,6 +164,50 @@ afterEach(async () => {
 });
 
 describe("API Worker outbox integration", () => {
+  it("creates and resolves a Better Auth session through the Worker boundary", async () => {
+    const integrationEnv = makeIntegrationEnv(new RecordingQueue());
+    const origin = integrationEnv.PUBLIC_WEB_ORIGIN;
+    const signUpResponse = await worker.fetch(
+      makeWorkerRequest(`${origin}/v1/auth/sign-up/email`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          origin,
+        },
+        body: JSON.stringify({
+          email: "alpha-one@example.test",
+          name: "Alpha One",
+          password: "correct-horse-battery-staple",
+        }),
+      }),
+      integrationEnv,
+      createExecutionContext(),
+    );
+
+    expect(signUpResponse.status).toBe(200);
+    expect(signUpResponse.headers.get("cache-control")).toBe("no-store");
+    const setCookie = signUpResponse.headers.get("set-cookie");
+    expect(setCookie).toBeTruthy();
+
+    const sessionResponse = await worker.fetch(
+      makeWorkerRequest(`${origin}/v1/auth/get-session`, {
+        headers: {
+          cookie: setCookie?.split(";", 1)[0] ?? "",
+        },
+      }),
+      integrationEnv,
+      createExecutionContext(),
+    );
+
+    expect(sessionResponse.status).toBe(200);
+    expect(await sessionResponse.json()).toMatchObject({
+      user: {
+        email: "alpha-one@example.test",
+        name: "Alpha One",
+      },
+    });
+  });
+
   it("delivers transaction to scheduled Queue publication and duplicate-safe consumption", async () => {
     const accepted = await acceptFixtureEvent();
     expect(accepted._tag).toBe("Accepted");

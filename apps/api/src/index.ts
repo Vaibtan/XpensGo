@@ -1,10 +1,13 @@
 import { layer as consoleRuntimeTelemetryLayer } from "@xpensego/adapters/cloudflare/console-runtime-telemetry";
 import {
+  BetterAuthUnavailable,
+  handleBetterAuthRequest,
+} from "@xpensego/adapters/auth/better-auth";
+import {
   InvalidRuntimeConfig,
   makeRuntimeConfigLayer,
 } from "@xpensego/adapters/cloudflare/runtime-config";
 import { makePostgresOutboxPersistenceLayer } from "@xpensego/adapters/postgres/outbox-store";
-import { CorrelationId } from "@xpensego/contracts/platform/correlation-id";
 import {
   OutboxJobV1,
   type OutboxJobV1 as OutboxQueueJob,
@@ -13,6 +16,8 @@ import {
   PlatformStatusJobV1,
   type PlatformStatusJobV1 as PlatformStatusQueueJob,
 } from "@xpensego/contracts/platform/platform-status-job";
+import { CorrelationId } from "@xpensego/contracts/platform/correlation-id";
+import type { PlatformInternalError } from "@xpensego/contracts/platform/platform-api";
 import {
   dispatchPendingOutbox,
   recordOutboxConsumption,
@@ -22,21 +27,10 @@ import type { RuntimeConfig } from "@xpensego/domain/platform/runtime-config";
 import { RuntimeTelemetry } from "@xpensego/domain/platform/runtime-telemetry";
 import { Effect, Layer, Redacted, Schema } from "effect";
 
+import { handleApplicationRequest } from "./http.js";
 import { makeOutboxQueuePublicationLayer } from "./outbox-queue-publication.js";
 
 const PlatformQueueJobV1 = Schema.Union(PlatformStatusJobV1, OutboxJobV1);
-
-class InvalidCorrelationId extends Schema.TaggedError<InvalidCorrelationId>()(
-  "InvalidCorrelationId",
-  {
-    correlationId: CorrelationId,
-  },
-) {
-  /** Safe explanation that excludes the rejected header value. */
-  override get message(): string {
-    return "The request correlation identifier is invalid.";
-  }
-}
 
 class InvalidPlatformQueueJob extends Schema.TaggedError<InvalidPlatformQueueJob>()(
   "InvalidPlatformQueueJob",
@@ -49,51 +43,6 @@ class InvalidPlatformQueueJob extends Schema.TaggedError<InvalidPlatformQueueJob
     return `Queue message ${this.messageId} is not a supported platform job.`;
   }
 }
-
-type ApiErrorCode =
-  "invalid_correlation_id" | "invalid_runtime_configuration" | "internal_error" | "route_not_found";
-
-function jsonResponse(body: unknown, status: number): Response {
-  return Response.json(body, {
-    status,
-    headers: {
-      "cache-control": "no-store",
-      "content-type": "application/json; charset=utf-8",
-    },
-  });
-}
-
-function errorResponse(
-  status: number,
-  code: ApiErrorCode,
-  message: string,
-  correlationId: CorrelationId,
-): Response {
-  return jsonResponse(
-    {
-      version: 1,
-      error: {
-        code,
-        message,
-        correlationId,
-      },
-    },
-    status,
-  );
-}
-
-function generatedCorrelationId(): CorrelationId {
-  return Schema.decodeUnknownSync(CorrelationId)(crypto.randomUUID());
-}
-
-const parseCorrelationId = Effect.fn("Api.parseCorrelationId")(function* (request: Request) {
-  const fallback = generatedCorrelationId();
-  const candidate = request.headers.get("x-correlation-id") ?? fallback;
-
-  return yield* Schema.decodeUnknown(CorrelationId)(candidate).pipe(
-    Effect.mapError(() => new InvalidCorrelationId({ correlationId: fallback })),
-  );
-});
 
 function invocationLayer(
   env: CloudflareBindings,
@@ -128,67 +77,74 @@ function scheduledInvocationLayer(env: CloudflareBindings) {
   );
 }
 
-const handleFetch = Effect.fn("Api.fetch")(function* (request: Request) {
-  const correlationId = yield* parseCorrelationId(request);
-  const url = new URL(request.url);
-
-  if (request.method === "GET" && url.pathname === "/v1/platform/status") {
-    const status = yield* readPlatformStatus({ correlationId });
-    return jsonResponse(status, 200);
+function runFetch(request: Request, env: CloudflareBindings): Promise<Response> {
+  if (new URL(request.url).pathname.startsWith("/v1/auth/")) {
+    return runAuthenticationFetch(request, env);
   }
 
-  return errorResponse(
-    404,
-    "route_not_found",
-    "The requested route does not exist.",
-    correlationId,
-  );
-});
+  return handleApplicationRequest(request, invocationLayer(env)).catch((cause: unknown) => {
+    const correlationId = Schema.decodeUnknownSync(CorrelationId)(crypto.randomUUID());
+    // oxlint-disable-next-line no-console -- Cloudflare records structured console errors in Workers Logs.
+    console.error(
+      JSON.stringify({
+        event: "UnhandledFetchFailure",
+        correlationId,
+        causeTag: cause instanceof Error ? cause.name : "UnknownDefect",
+      }),
+    );
+    const responseBody: PlatformInternalError = {
+      version: 1,
+      error: {
+        code: "internal_error",
+        message: "The service could not complete the request.",
+        correlationId,
+      },
+    };
+    return Response.json(responseBody, {
+      status: 500,
+      headers: { "cache-control": "no-store" },
+    });
+  });
+}
 
-function runFetch(request: Request, env: CloudflareBindings): Promise<Response> {
-  const program = handleFetch(request).pipe(
-    Effect.provide(invocationLayer(env)),
-    Effect.catchTag("InvalidCorrelationId", (error) =>
+function runAuthenticationFetch(request: Request, env: CloudflareBindings): Promise<Response> {
+  const program = handleBetterAuthRequest(
+    {
+      baseUrl: env.PUBLIC_WEB_ORIGIN,
+      databaseUrl: Redacted.make(env.HYPERDRIVE.connectionString),
+      secret: Redacted.make(env.BETTER_AUTH_SECRET ?? ""),
+      trustedOrigin: env.PUBLIC_WEB_ORIGIN,
+      useSecureCookies: env.PUBLIC_WEB_ORIGIN.startsWith("https://"),
+    },
+    request,
+  ).pipe(
+    Effect.map((response) => {
+      const headers = new Headers(response.headers);
+      headers.set("cache-control", "no-store");
+      return new Response(response.body, {
+        status: response.status,
+        statusText: response.statusText,
+        headers,
+      });
+    }),
+    Effect.catchAll((error) =>
       Effect.succeed(
-        errorResponse(
-          400,
-          "invalid_correlation_id",
-          "The correlation identifier is invalid.",
-          error.correlationId,
+        Response.json(
+          {
+            version: 1,
+            error: {
+              code:
+                error instanceof BetterAuthUnavailable
+                  ? "authentication_unavailable"
+                  : "invalid_authentication_config",
+              message: "Authentication is temporarily unavailable.",
+              correlationId: crypto.randomUUID(),
+            },
+          },
+          { status: 503, headers: { "cache-control": "no-store" } },
         ),
       ),
     ),
-    Effect.catchTag("InvalidRuntimeConfig", () => {
-      const correlationId = generatedCorrelationId();
-      return Effect.succeed(
-        errorResponse(
-          500,
-          "invalid_runtime_configuration",
-          "The service is not configured correctly.",
-          correlationId,
-        ),
-      );
-    }),
-    Effect.catchAllCause((cause) => {
-      const correlationId = generatedCorrelationId();
-      return Effect.sync(() => {
-        // oxlint-disable-next-line no-console -- Cloudflare records structured console errors in Workers Logs.
-        console.error(
-          JSON.stringify({
-            event: "UnhandledFetchFailure",
-            correlationId,
-            causeTag: cause._tag,
-          }),
-        );
-
-        return errorResponse(
-          500,
-          "internal_error",
-          "The service could not complete the request.",
-          correlationId,
-        );
-      });
-    }),
   );
 
   return Effect.runPromise(program);
@@ -260,11 +216,11 @@ function processPlatformStatusMessageAtBoundary(
     ),
     Effect.catchAllCause((cause) =>
       Effect.sync(() => {
-        message.retry({ delaySeconds: queueRetryDelaySeconds(message.attempts) });
-        // oxlint-disable-next-line no-console -- Unexpected message failures retry only the affected Queue message.
+        message.ack();
+        // oxlint-disable-next-line no-console -- Unclassified defects are terminal until code is reviewed.
         console.error(
           JSON.stringify({
-            event: "UnhandledQueueMessageFailure",
+            event: "TerminalQueueMessageDefect",
             messageId: message.id,
             queue: queueName,
             attempts: message.attempts,
@@ -304,11 +260,11 @@ function processOutboxMessageAtBoundary(
     ),
     Effect.catchAllCause((cause) =>
       Effect.sync(() => {
-        message.retry({ delaySeconds: queueRetryDelaySeconds(message.attempts) });
-        // oxlint-disable-next-line no-console -- Unexpected message failures retry only the affected Queue message.
+        message.ack();
+        // oxlint-disable-next-line no-console -- Durable outbox recovery replaces blind defect retries.
         console.error(
           JSON.stringify({
-            event: "UnhandledQueueMessageFailure",
+            event: "TerminalQueueMessageDefect",
             messageId: message.id,
             queue: queueName,
             attempts: message.attempts,
@@ -414,11 +370,11 @@ function runQueue(batch: MessageBatch<unknown>, env: CloudflareBindings): Promis
   }).pipe(
     Effect.catchAllCause((cause) =>
       Effect.sync(() => {
-        batch.retryAll({ delaySeconds: 5 });
-        // oxlint-disable-next-line no-console -- Unexpected Queue failures are retried and recorded safely.
+        batch.ackAll();
+        // oxlint-disable-next-line no-console -- Unclassified batch defects require code review, not re-execution.
         console.error(
           JSON.stringify({
-            event: "UnhandledQueueFailure",
+            event: "TerminalQueueBatchDefect",
             queue: batch.queue,
             causeTag: cause._tag,
           }),

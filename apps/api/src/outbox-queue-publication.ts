@@ -1,6 +1,7 @@
 import type { OutboxJobV1 } from "@xpensego/contracts/platform/outbox-job";
 import {
   OutboxPublication,
+  OutboxPublicationOutcomeUnknown,
   OutboxPublicationUnavailable,
 } from "@xpensego/domain/outbox/outbox-delivery";
 import { Effect, Layer } from "effect";
@@ -35,7 +36,7 @@ export function makeOutboxQueuePublicationLayer(queue: CloudflareBindings["PLATF
           Effect.timeoutFail({
             duration: "5 seconds",
             onTimeout: () =>
-              new OutboxPublicationUnavailable({
+              new OutboxPublicationOutcomeUnknown({
                 operation: "publishOutboxMessage",
                 outboxMessageId: input.outboxMessageId,
                 reason: "queue_timeout",

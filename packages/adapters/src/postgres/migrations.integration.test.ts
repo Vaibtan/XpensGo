@@ -33,6 +33,8 @@ describe("PostgreSQL migrations", () => {
         [1, "foundation"],
         [2, "outbox_dispatch"],
         [3, "outbox_recovery_policy"],
+        [4, "queue_outcome_unknown"],
+        [5, "better_auth"],
       ]);
       expect(secondRun).toEqual([]);
     });

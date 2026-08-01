@@ -18,10 +18,14 @@ class OutboxRecoveryCommandFailed extends Schema.TaggedError<OutboxRecoveryComma
 }
 
 const program = Effect.gen(function* () {
+  const databaseUrl = yield* resolveMigrationDatabaseUrl().pipe(
+    Effect.mapError(() => new OutboxRecoveryCommandFailed({ reason: "persistence_unavailable" })),
+  );
   const outboxMessageId = yield* Schema.decodeUnknown(OutboxMessageId)(process.argv[2]).pipe(
     Effect.mapError(() => new OutboxRecoveryCommandFailed({ reason: "invalid_identifier" })),
   );
   const recovered = yield* recoverFailedOutboxPublication({ outboxMessageId }).pipe(
+    Effect.provide(makePostgresOutboxRecoveryLayer(databaseUrl)),
     Effect.mapError(() => new OutboxRecoveryCommandFailed({ reason: "persistence_unavailable" })),
   );
 
@@ -32,6 +36,6 @@ const program = Effect.gen(function* () {
   yield* Effect.logInfo("Terminal outbox publication returned to the dispatcher", {
     outboxMessageId,
   });
-}).pipe(Effect.provide(makePostgresOutboxRecoveryLayer(resolveMigrationDatabaseUrl())));
+});
 
 NodeRuntime.runMain(program);

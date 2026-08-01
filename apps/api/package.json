@@ -13,14 +13,15 @@
     "types": "wrangler types --env-interface CloudflareBindings"
   },
   "dependencies": {
+    "@effect/platform": "0.97.1",
     "@xpensego/adapters": "0.1.0",
     "@xpensego/contracts": "0.1.0",
     "@xpensego/domain": "0.1.0",
     "effect": "3.22.1"
   },
   "devDependencies": {
-    "@effect/sql-pg": "0.53.0",
     "@cloudflare/vitest-pool-workers": "0.19.1",
+    "@effect/sql-pg": "0.53.0",
     "@xpensego/config": "0.1.0",
     "@xpensego/testing": "0.1.0",
     "typescript": "6.0.3",

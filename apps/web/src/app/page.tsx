@@ -15,7 +15,7 @@ export default function HomePage() {
         disabled until identity, ownership, and Neon persistence are proven.
       </p>
       <Link className="primaryLink" href="/workspace">
-        Inspect the dynamic workspace
+        Open your workspace
       </Link>
     </main>
   );

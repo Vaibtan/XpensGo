@@ -38,6 +38,13 @@ export type RuntimeTelemetryEvent =
       readonly outcome: "failed";
     }
   | {
+      readonly _tag: "OutboxPublicationOutcomeUnknown";
+      readonly correlationId: CorrelationId;
+      readonly outboxMessageId: OutboxMessageId;
+      readonly attempt: number;
+      readonly outcome: "unknown";
+    }
+  | {
       readonly _tag: "OutboxConsumptionRecorded";
       readonly correlationId: CorrelationId;
       readonly outboxMessageId: OutboxMessageId;

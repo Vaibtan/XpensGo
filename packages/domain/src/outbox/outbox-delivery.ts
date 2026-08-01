@@ -90,7 +90,7 @@ export interface MarkOutboxPublishedInput {
 }
 
 /** Stable reason stored when Queue publication is deferred. */
-export type OutboxPublicationFailureCode = "queue_unavailable";
+export type OutboxPublicationFailureCode = "queue_outcome_unknown" | "queue_unavailable";
 
 /** Durable transition chosen after one failed Queue publication attempt. */
 export type OutboxPublicationFailureDisposition = "retry" | "terminal";
@@ -144,7 +144,7 @@ export class OutboxPersistenceUnavailable extends Schema.TaggedError<OutboxPersi
       "recordOutboxConsumption",
       "recoverFailedOutboxPublication",
     ),
-    cause: Schema.Unknown,
+    reason: Schema.Literal("database_unavailable"),
   },
 ) {
   /** Safe description that excludes SQL, credentials, and message contents. */
@@ -173,12 +173,27 @@ export class OutboxPublicationUnavailable extends Schema.TaggedError<OutboxPubli
   {
     operation: Schema.Literal("publishOutboxMessage"),
     outboxMessageId: OutboxMessageId,
-    reason: Schema.Literal("queue_request_failed", "queue_timeout"),
+    reason: Schema.Literal("queue_request_failed"),
   },
 ) {
   /** Safe description that excludes the Queue body and provider detail. */
   override get message(): string {
     return `Queue publication is unavailable for outbox message ${this.outboxMessageId}`;
+  }
+}
+
+/** A timed-out Queue request that may have been accepted before the client lost certainty. */
+export class OutboxPublicationOutcomeUnknown extends Schema.TaggedError<OutboxPublicationOutcomeUnknown>()(
+  "OutboxPublicationOutcomeUnknown",
+  {
+    operation: Schema.Literal("publishOutboxMessage"),
+    outboxMessageId: OutboxMessageId,
+    reason: Schema.Literal("queue_timeout"),
+  },
+) {
+  /** Safe description that excludes the Queue body and provider detail. */
+  override get message(): string {
+    return `Queue publication outcome is unknown for outbox message ${this.outboxMessageId}`;
   }
 }
 
@@ -231,7 +246,7 @@ export interface OutboxPublicationService {
   readonly publish: (input: {
     readonly outboxMessageId: OutboxMessageIdType;
     readonly correlationId: CorrelationId;
-  }) => Effect.Effect<void, OutboxPublicationUnavailable>;
+  }) => Effect.Effect<void, OutboxPublicationOutcomeUnknown | OutboxPublicationUnavailable>;
 }
 
 /** Authority seam for delivering durable outbox identifiers to the configured Queue. */
@@ -281,11 +296,19 @@ export const dispatchPendingOutbox = Effect.fn("Outbox.dispatchPending")(functio
 
       return publication.publish(publicationInput).pipe(
         Effect.matchEffect({
-          onFailure: () => {
+          onFailure: (error) => {
             const disposition =
               message.attempt >= maximumPublicationAttempts ? "terminal" : "retry";
-            const telemetryEvent =
-              disposition === "terminal"
+            const outcomeUnknown = error._tag === "OutboxPublicationOutcomeUnknown";
+            const telemetryEvent = outcomeUnknown
+              ? ({
+                  _tag: "OutboxPublicationOutcomeUnknown",
+                  outboxMessageId: message.outboxMessageId,
+                  correlationId: message.correlationId,
+                  attempt: message.attempt,
+                  outcome: "unknown",
+                } as const)
+              : disposition === "terminal"
                 ? ({
                     _tag: "OutboxPublicationFailed",
                     outboxMessageId: message.outboxMessageId,
@@ -304,8 +327,10 @@ export const dispatchPendingOutbox = Effect.fn("Outbox.dispatchPending")(functio
               .recordPublicationFailure({
                 outboxMessageId: message.outboxMessageId,
                 claimId: message.claimId,
-                errorCode: "queue_unavailable",
-                retryDelaySeconds: retryDelaySeconds(message.attempt),
+                errorCode: outcomeUnknown ? "queue_outcome_unknown" : "queue_unavailable",
+                retryDelaySeconds: outcomeUnknown
+                  ? Schema.decodeUnknownSync(OutboxRetryDelaySeconds)(receiptTimeoutSeconds)
+                  : retryDelaySeconds(message.attempt),
                 disposition,
               })
               .pipe(

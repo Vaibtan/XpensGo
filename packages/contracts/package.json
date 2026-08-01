@@ -4,10 +4,12 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./identity/better-auth-session": "./src/identity/better-auth-session.ts",
     "./platform/correlation-id": "./src/platform/correlation-id.ts",
     "./platform/job-id": "./src/platform/job-id.ts",
     "./platform/outbox-job": "./src/platform/outbox-job.ts",
     "./platform/outbox-message-id": "./src/platform/outbox-message-id.ts",
+    "./platform/platform-api": "./src/platform/platform-api.ts",
     "./platform/platform-status": "./src/platform/platform-status.ts",
     "./platform/platform-status-job": "./src/platform/platform-status-job.ts"
   },
@@ -17,6 +19,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@effect/platform": "0.97.1",
     "effect": "3.22.1"
   },
   "devDependencies": {

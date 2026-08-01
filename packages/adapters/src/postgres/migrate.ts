@@ -15,14 +15,13 @@ class MigrationCommandFailed extends Schema.TaggedError<MigrationCommandFailed>(
   }
 }
 
-const databaseUrl = resolveMigrationDatabaseUrl();
-
-const program = runMigrations(databaseUrl).pipe(
-  Effect.tap((applied) =>
-    Effect.logInfo("PostgreSQL migrations complete", {
-      appliedCount: applied.length,
-    }),
-  ),
+const program = Effect.gen(function* () {
+  const databaseUrl = yield* resolveMigrationDatabaseUrl();
+  const applied = yield* runMigrations(databaseUrl);
+  yield* Effect.logInfo("PostgreSQL migrations complete", {
+    appliedCount: applied.length,
+  });
+}).pipe(
   Effect.asVoid,
   Effect.mapError((error) => new MigrationCommandFailed({ errorTag: error._tag })),
 );

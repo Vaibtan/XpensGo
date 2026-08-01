@@ -34,6 +34,18 @@ function databaseForbiddenEnv(): CloudflareBindings {
   return bindings;
 }
 
+function defectiveRuntimeEnv(): CloudflareBindings {
+  const bindings: CloudflareBindings = { ...env };
+
+  Object.defineProperty(bindings, "SERVICE_NAME", {
+    get() {
+      throw new Error("simulated unclassified runtime defect");
+    },
+  });
+
+  return bindings;
+}
+
 describe("Xpensego API Worker", () => {
   it("serves a versioned status response through the real fetch entrypoint", async () => {
     const response = await SELF.fetch("https://xpensego.test/v1/platform/status", {
@@ -50,6 +62,26 @@ describe("Xpensego API Worker", () => {
       service: "xpensego-api",
       environment: "development",
       correlationId: platformFixtureIds.correlationId,
+    });
+  });
+
+  it("serves OpenAPI from the same contract as the status route", async () => {
+    const response = await SELF.fetch("https://xpensego.test/v1/openapi.json");
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(await response.json()).toMatchObject({
+      openapi: "3.1.0",
+      paths: {
+        "/v1/platform/status": {
+          get: {
+            responses: {
+              "400": {},
+              "500": {},
+            },
+          },
+        },
+      },
     });
   });
 
@@ -187,5 +219,29 @@ describe("Xpensego API Worker", () => {
     expect(result.retryBatch).toEqual({ retry: false });
     expect(result.explicitAcks).toEqual([]);
     expect(result.retryMessages).toEqual([{ msgId: "unavailable-outbox-message" }]);
+  });
+
+  it("does not blindly retry a batch after an unclassified defect", async () => {
+    const batch = createMessageBatch("xpensego-platform-jobs-development", [
+      {
+        id: "defective-status-message",
+        timestamp: new Date("2026-07-31T00:00:00.000Z"),
+        attempts: 1,
+        body: {
+          version: 1,
+          kind: "platform.status.requested",
+          jobId: platformFixtureIds.jobId,
+          correlationId: platformFixtureIds.correlationId,
+        },
+      },
+    ]);
+    const context = createExecutionContext();
+
+    await worker.queue(batch, defectiveRuntimeEnv(), context);
+
+    const result = await getQueueResult(batch, context);
+    expect(result.ackAll).toBe(true);
+    expect(result.retryBatch).toEqual({ retry: false });
+    expect(result.retryMessages).toEqual([]);
   });
 });

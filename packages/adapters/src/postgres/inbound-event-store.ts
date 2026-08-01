@@ -34,6 +34,13 @@ function isOwnershipConstraintViolation(error: unknown): boolean {
   return error instanceof SqlError && Schema.is(OwnershipConstraintViolation)(error.cause);
 }
 
+function observePersistenceFailure(operation: string, cause: unknown) {
+  return Effect.logWarning("PostgreSQL inbound-event operation failed", {
+    operation,
+    causeTag: cause instanceof Error ? cause.name : "UnknownFailure",
+  });
+}
+
 /** PostgreSQL-backed inbound-event store that requires an already-scoped client. */
 export const make = Effect.gen(function* () {
   const sql = yield* PgClient.PgClient;
@@ -125,6 +132,11 @@ export const make = Effect.gen(function* () {
     });
 
     return yield* sql.withTransaction(transaction).pipe(
+      Effect.tapError((cause) =>
+        cause instanceof InboundEventOwnershipMismatch
+          ? Effect.void
+          : observePersistenceFailure("persistInboundEvent", cause),
+      ),
       Effect.mapError((cause) =>
         cause instanceof InboundEventOwnershipMismatch
           ? cause
@@ -136,7 +148,7 @@ export const make = Effect.gen(function* () {
               })
             : new InboundEventPersistenceUnavailable({
                 operation: "persistInboundEvent",
-                cause,
+                reason: "database_unavailable",
               }),
       ),
     );
@@ -162,11 +174,12 @@ export function makePostgresInboundEventStoreLayer(databaseUrl: Redacted.Redacte
     idleTimeout: "1 second",
     maxConnections: 4,
   }).pipe(
+    Layer.tapError((cause) => observePersistenceFailure("connectInboundEventStore", cause)),
     Layer.mapError(
-      (cause) =>
+      () =>
         new InboundEventPersistenceUnavailable({
           operation: "connectInboundEventStore",
-          cause,
+          reason: "database_unavailable",
         }),
     ),
   );

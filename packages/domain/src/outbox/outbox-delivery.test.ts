@@ -8,6 +8,7 @@ import {
   OutboxPublicationAttempt,
   OutboxPersistence,
   OutboxPublication,
+  OutboxPublicationOutcomeUnknown,
   OutboxPublicationUnavailable,
   dispatchPendingOutbox,
   recordOutboxConsumption,
@@ -38,11 +39,18 @@ function makeTestProgram(options: {
   readonly claimed: ReadonlyArray<ClaimedOutboxPublication>;
   readonly consumptionOutcome?: OutboxConsumptionOutcome;
   readonly failPublicationFor?: OutboxMessageId;
+  readonly unknownPublicationFor?: OutboxMessageId;
 }) {
   return Effect.gen(function* () {
     const published = yield* Ref.make<ReadonlyArray<OutboxMessageId>>([]);
     const marked = yield* Ref.make<ReadonlyArray<OutboxMessageId>>([]);
-    const deferred = yield* Ref.make<ReadonlyArray<OutboxMessageId>>([]);
+    const deferred = yield* Ref.make<
+      ReadonlyArray<{
+        readonly outboxMessageId: OutboxMessageId;
+        readonly errorCode: string;
+        readonly retryDelaySeconds: number;
+      }>
+    >([]);
     const failed = yield* Ref.make<ReadonlyArray<OutboxMessageId>>([]);
     const telemetry = yield* Ref.make<ReadonlyArray<RuntimeTelemetryEvent>>([]);
 
@@ -53,11 +61,18 @@ function makeTestProgram(options: {
           claimPending: () => Effect.succeed(options.claimed),
           markPublished: ({ outboxMessageId }) =>
             Ref.update(marked, (current) => [...current, outboxMessageId]),
-          recordPublicationFailure: ({ outboxMessageId, disposition }) =>
-            Ref.update(disposition === "terminal" ? failed : deferred, (current) => [
-              ...current,
-              outboxMessageId,
-            ]),
+          recordPublicationFailure: ({
+            outboxMessageId,
+            disposition,
+            errorCode,
+            retryDelaySeconds,
+          }) =>
+            disposition === "terminal"
+              ? Ref.update(failed, (current) => [...current, outboxMessageId])
+              : Ref.update(deferred, (current) => [
+                  ...current,
+                  { outboxMessageId, errorCode, retryDelaySeconds },
+                ]),
           recordConsumption: () =>
             Effect.succeed(options.consumptionOutcome ?? { _tag: "Processed" }),
         }),
@@ -66,15 +81,23 @@ function makeTestProgram(options: {
         OutboxPublication,
         OutboxPublication.of({
           publish: (input) =>
-            options.failPublicationFor === input.outboxMessageId
+            options.unknownPublicationFor === input.outboxMessageId
               ? Effect.fail(
-                  new OutboxPublicationUnavailable({
+                  new OutboxPublicationOutcomeUnknown({
                     operation: "publishOutboxMessage",
                     outboxMessageId: input.outboxMessageId,
-                    reason: "queue_request_failed",
+                    reason: "queue_timeout",
                   }),
                 )
-              : Ref.update(published, (current) => [...current, input.outboxMessageId]),
+              : options.failPublicationFor === input.outboxMessageId
+                ? Effect.fail(
+                    new OutboxPublicationUnavailable({
+                      operation: "publishOutboxMessage",
+                      outboxMessageId: input.outboxMessageId,
+                      reason: "queue_request_failed",
+                    }),
+                  )
+                : Ref.update(published, (current) => [...current, input.outboxMessageId]),
         }),
       ),
       Layer.succeed(
@@ -143,11 +166,41 @@ describe("outbox delivery", () => {
     expect(result.summary).toEqual({ claimed: 2, published: 1, deferred: 1, failed: 0 });
     expect(result.published).toEqual([secondPublication.outboxMessageId]);
     expect(result.marked).toEqual([secondPublication.outboxMessageId]);
-    expect(result.deferred).toEqual([firstPublication.outboxMessageId]);
+    expect(result.deferred).toEqual([
+      {
+        outboxMessageId: firstPublication.outboxMessageId,
+        errorCode: "queue_unavailable",
+        retryDelaySeconds: 30,
+      },
+    ]);
     expect(result.telemetry.map((event) => event.outcome).toSorted()).toEqual([
       "deferred",
       "published",
     ]);
+  });
+
+  it("persists an unknown Queue outcome behind the consumer-receipt window", async () => {
+    const result = await Effect.runPromise(
+      makeTestProgram({
+        claimed: [firstPublication],
+        unknownPublicationFor: firstPublication.outboxMessageId,
+      }),
+    );
+
+    expect(result.summary).toEqual({ claimed: 1, published: 0, deferred: 1, failed: 0 });
+    expect(result.deferred).toEqual([
+      {
+        outboxMessageId: firstPublication.outboxMessageId,
+        errorCode: "queue_outcome_unknown",
+        retryDelaySeconds: 600,
+      },
+    ]);
+    expect(result.telemetry).toContainEqual(
+      expect.objectContaining({
+        _tag: "OutboxPublicationOutcomeUnknown",
+        outcome: "unknown",
+      }),
+    );
   });
 
   it("returns the persistence-owned duplicate consumption outcome", async () => {

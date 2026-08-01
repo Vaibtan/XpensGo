@@ -73,7 +73,7 @@ describe("Cloudflare outbox Queue publication", () => {
     ]);
   });
 
-  it("classifies a non-settling Queue send as a bounded timeout", async () => {
+  it("classifies a non-settling Queue send as an unknown publication outcome", async () => {
     vi.useFakeTimers();
     const resultPromise = Effect.runPromise(publishWith(new TestQueue(true)).pipe(Effect.either));
 
@@ -83,7 +83,7 @@ describe("Cloudflare outbox Queue publication", () => {
     expect(result._tag).toBe("Left");
     if (result._tag === "Left") {
       expect(result.left).toMatchObject({
-        _tag: "OutboxPublicationUnavailable",
+        _tag: "OutboxPublicationOutcomeUnknown",
         reason: "queue_timeout",
       });
     }

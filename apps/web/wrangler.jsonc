@@ -8,6 +8,12 @@
     "directory": ".open-next/assets",
     "binding": "ASSETS",
   },
+  "services": [
+    {
+      "binding": "API",
+      "service": "xpensego-api",
+    },
+  ],
   "observability": {
     "enabled": true,
     "logs": {
@@ -22,6 +28,12 @@
   "env": {
     "staging": {
       "name": "xpensego-web-staging",
+      "services": [
+        {
+          "binding": "API",
+          "service": "xpensego-api-staging",
+        },
+      ],
     },
   },
 }

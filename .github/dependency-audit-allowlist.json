@@ -11,6 +11,10 @@
       "maximumSeverity": "moderate",
       "isDirect": true
     },
+    "better-auth": {
+      "maximumSeverity": "moderate",
+      "isDirect": true
+    },
     "next": {
       "maximumSeverity": "high",
       "isDirect": true

@@ -35,9 +35,18 @@ const OutboxConsumptionRow = Schema.Struct({
 
 function persistenceUnavailable(
   operation: OutboxPersistenceUnavailable["operation"],
-  cause: unknown,
 ): OutboxPersistenceUnavailable {
-  return new OutboxPersistenceUnavailable({ operation, cause });
+  return new OutboxPersistenceUnavailable({ operation, reason: "database_unavailable" });
+}
+
+function observePersistenceFailure(
+  operation: OutboxPersistenceUnavailable["operation"],
+  cause: unknown,
+) {
+  return Effect.logWarning("PostgreSQL outbox operation failed", {
+    operation,
+    causeTag: cause instanceof Error ? cause.name : "UnknownFailure",
+  });
 }
 
 /** PostgreSQL outbox persistence implementation that requires an already-scoped client. */
@@ -169,9 +178,10 @@ export const make = Effect.gen(function* () {
       return yield* Schema.decodeUnknown(Schema.Array(ClaimedOutboxPublicationRow))(rows);
     });
 
-    return yield* sql
-      .withTransaction(transaction)
-      .pipe(Effect.mapError((cause) => persistenceUnavailable("claimPendingOutbox", cause)));
+    return yield* sql.withTransaction(transaction).pipe(
+      Effect.tapError((cause) => observePersistenceFailure("claimPendingOutbox", cause)),
+      Effect.mapError(() => persistenceUnavailable("claimPendingOutbox")),
+    );
   });
 
   const markPublished: OutboxPersistenceService["markPublished"] = Effect.fn(
@@ -200,10 +210,15 @@ export const make = Effect.gen(function* () {
     });
 
     return yield* operation.pipe(
+      Effect.tapError((cause) =>
+        cause instanceof OutboxPublicationStateConflict
+          ? Effect.void
+          : observePersistenceFailure("markOutboxPublished", cause),
+      ),
       Effect.mapError((cause) =>
         cause instanceof OutboxPublicationStateConflict
           ? cause
-          : persistenceUnavailable("markOutboxPublished", cause),
+          : persistenceUnavailable("markOutboxPublished"),
       ),
     );
   });
@@ -244,10 +259,15 @@ export const make = Effect.gen(function* () {
     });
 
     return yield* operation.pipe(
+      Effect.tapError((cause) =>
+        cause instanceof OutboxPublicationStateConflict
+          ? Effect.void
+          : observePersistenceFailure("recordOutboxPublicationFailure", cause),
+      ),
       Effect.mapError((cause) =>
         cause instanceof OutboxPublicationStateConflict
           ? cause
-          : persistenceUnavailable("recordOutboxPublicationFailure", cause),
+          : persistenceUnavailable("recordOutboxPublicationFailure"),
       ),
     );
   });
@@ -285,7 +305,8 @@ export const make = Effect.gen(function* () {
     });
 
     return yield* operation.pipe(
-      Effect.mapError((cause) => persistenceUnavailable("recordOutboxConsumption", cause)),
+      Effect.tapError((cause) => observePersistenceFailure("recordOutboxConsumption", cause)),
+      Effect.mapError(() => persistenceUnavailable("recordOutboxConsumption")),
     );
   });
 
@@ -338,7 +359,10 @@ export const makeRecovery = Effect.gen(function* () {
     });
 
     return yield* operation.pipe(
-      Effect.mapError((cause) => persistenceUnavailable("recoverFailedOutboxPublication", cause)),
+      Effect.tapError((cause) =>
+        observePersistenceFailure("recoverFailedOutboxPublication", cause),
+      ),
+      Effect.mapError(() => persistenceUnavailable("recoverFailedOutboxPublication")),
     );
   });
 
@@ -361,7 +385,10 @@ export function makePostgresOutboxPersistenceLayer(databaseUrl: Redacted.Redacte
     connectTimeout: "5 seconds",
     idleTimeout: "1 second",
     maxConnections: 4,
-  }).pipe(Layer.mapError((cause) => persistenceUnavailable("connectOutboxPersistence", cause)));
+  }).pipe(
+    Layer.tapError((cause) => observePersistenceFailure("connectOutboxPersistence", cause)),
+    Layer.mapError(() => persistenceUnavailable("connectOutboxPersistence")),
+  );
 
   return layerWithoutDependencies.pipe(Layer.provide(clientLayer));
 }
@@ -374,7 +401,10 @@ export function makePostgresOutboxRecoveryLayer(databaseUrl: Redacted.Redacted<s
     connectTimeout: "5 seconds",
     idleTimeout: "1 second",
     maxConnections: 1,
-  }).pipe(Layer.mapError((cause) => persistenceUnavailable("connectOutboxRecovery", cause)));
+  }).pipe(
+    Layer.tapError((cause) => observePersistenceFailure("connectOutboxRecovery", cause)),
+    Layer.mapError(() => persistenceUnavailable("connectOutboxRecovery")),
+  );
 
   return recoveryLayerWithoutDependencies.pipe(Layer.provide(clientLayer));
 }

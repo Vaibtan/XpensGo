@@ -251,6 +251,16 @@ export function IdentityControls({ initialIdentity }: IdentityControlsProps) {
               <code>
                 /{challenge.purpose} {challenge.token}
               </code>
+              {challenge.deepLink === null ? null : (
+                <a
+                  className="primaryButton"
+                  href={challenge.deepLink}
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  Open Telegram
+                </a>
+              )}
               <small>Expires in ten minutes. Do not share it.</small>
             </div>
           )}

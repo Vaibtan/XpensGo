@@ -10,6 +10,10 @@ import {
   resolveBetterAuthWebSession,
 } from "@xpensego/adapters/auth/better-auth";
 import {
+  TelegramBotUsername,
+  telegramChallengeDeepLink,
+} from "@xpensego/adapters/telegram/deep-link";
+import {
   CurrentWebSession,
   type CurrentWebSessionService,
   type IdentityBadRequestError,
@@ -165,98 +169,111 @@ const PlatformHandlers = HttpApiBuilder.group(PlatformApi, "platform", (handlers
   }),
 );
 
-const IdentityHandlers = HttpApiBuilder.group(IdentityApi, "identity", (handlers) =>
-  handlers
-    .handle("overview", () =>
-      Effect.gen(function* () {
-        const { actor, current } = yield* resolveCurrentIdentity();
-        const overview = yield* readIdentityOverview({ actor }).pipe(
-          Effect.mapError(() => identityUnavailable(current.correlationId)),
-        );
-        return toIdentityOverview(current.session, overview);
-      }),
-    )
-    .handle("changeTimezone", ({ payload }) =>
-      Effect.gen(function* () {
-        const { actor, current } = yield* resolveCurrentIdentity();
-        const timezone = yield* Schema.decodeUnknown(UserTimezone)(payload.timezone).pipe(
-          Effect.mapError(() =>
-            identityBadRequest(
-              current.correlationId,
-              "invalid_timezone",
-              "Provide a supported IANA timezone.",
+function identityHandlers(botUsernameCandidate: string | undefined) {
+  const botUsername = Schema.decodeUnknownEither(TelegramBotUsername)(botUsernameCandidate);
+  const deepLink = (
+    purpose: "link" | "unlink",
+    token: Parameters<typeof telegramChallengeDeepLink>[0]["token"],
+  ) =>
+    botUsername._tag === "Left"
+      ? null
+      : telegramChallengeDeepLink({ botUsername: botUsername.right, purpose, token });
+
+  return HttpApiBuilder.group(IdentityApi, "identity", (handlers) =>
+    handlers
+      .handle("overview", () =>
+        Effect.gen(function* () {
+          const { actor, current } = yield* resolveCurrentIdentity();
+          const overview = yield* readIdentityOverview({ actor }).pipe(
+            Effect.mapError(() => identityUnavailable(current.correlationId)),
+          );
+          return toIdentityOverview(current.session, overview);
+        }),
+      )
+      .handle("changeTimezone", ({ payload }) =>
+        Effect.gen(function* () {
+          const { actor, current } = yield* resolveCurrentIdentity();
+          const timezone = yield* Schema.decodeUnknown(UserTimezone)(payload.timezone).pipe(
+            Effect.mapError(() =>
+              identityBadRequest(
+                current.correlationId,
+                "invalid_timezone",
+                "Provide a supported IANA timezone.",
+              ),
             ),
-          ),
-        );
-        const changedActor = yield* changeUserTimezone({ actor, timezone }).pipe(
-          Effect.mapError(() => identityUnavailable(current.correlationId)),
-        );
-        const overview = yield* readIdentityOverview({ actor: changedActor }).pipe(
-          Effect.mapError(() => identityUnavailable(current.correlationId)),
-        );
-        return toIdentityOverview(current.session, overview);
-      }),
-    )
-    .handle("createTelegramLinkChallenge", () =>
-      Effect.gen(function* () {
-        const { actor, current } = yield* resolveCurrentIdentity();
-        const challenge = yield* createTelegramLinkChallenge({ actor }).pipe(
-          Effect.mapError((error) =>
-            error instanceof ChannelLinkChallengeRateLimited
-              ? identityRateLimited(current.correlationId, error)
-              : identityUnavailable(current.correlationId),
-          ),
-        );
-        return {
-          version: 1,
-          channel: "telegram",
-          purpose: "link",
-          token: Redacted.value(challenge.token),
-          expiresAtMillis: challenge.expiresAtMillis,
-        } satisfies TelegramChallengeV1;
-      }),
-    )
-    .handle("createTelegramUnlinkChallenge", ({ payload }) =>
-      Effect.gen(function* () {
-        const { actor, current } = yield* resolveCurrentIdentity();
-        const channelIdentityId = yield* Schema.decodeUnknown(ChannelIdentityId)(
-          payload.channelIdentityId,
-        ).pipe(
-          Effect.mapError(() =>
-            identityBadRequest(
-              current.correlationId,
-              "invalid_channel_identity",
-              "The Telegram identity identifier is invalid.",
+          );
+          const changedActor = yield* changeUserTimezone({ actor, timezone }).pipe(
+            Effect.mapError(() => identityUnavailable(current.correlationId)),
+          );
+          const overview = yield* readIdentityOverview({ actor: changedActor }).pipe(
+            Effect.mapError(() => identityUnavailable(current.correlationId)),
+          );
+          return toIdentityOverview(current.session, overview);
+        }),
+      )
+      .handle("createTelegramLinkChallenge", () =>
+        Effect.gen(function* () {
+          const { actor, current } = yield* resolveCurrentIdentity();
+          const challenge = yield* createTelegramLinkChallenge({ actor }).pipe(
+            Effect.mapError((error) =>
+              error instanceof ChannelLinkChallengeRateLimited
+                ? identityRateLimited(current.correlationId, error)
+                : identityUnavailable(current.correlationId),
             ),
-          ),
-        );
-        const challenge = yield* createTelegramUnlinkChallenge({
-          actor,
-          channelIdentityId,
-        }).pipe(
-          Effect.mapError((error) => {
-            if (error instanceof ChannelLinkChallengeRateLimited) {
-              return identityRateLimited(current.correlationId, error);
-            }
-            if (
-              error instanceof ChannelIdentityNotFound ||
-              error instanceof IdentityAuthorityNotFound
-            ) {
-              return identityNotFound(current.correlationId);
-            }
-            return identityUnavailable(current.correlationId);
-          }),
-        );
-        return {
-          version: 1,
-          channel: "telegram",
-          purpose: "unlink",
-          token: Redacted.value(challenge.token),
-          expiresAtMillis: challenge.expiresAtMillis,
-        } satisfies TelegramChallengeV1;
-      }),
-    ),
-);
+          );
+          return {
+            version: 1,
+            channel: "telegram",
+            purpose: "link",
+            token: Redacted.value(challenge.token),
+            deepLink: deepLink("link", Redacted.value(challenge.token)),
+            expiresAtMillis: challenge.expiresAtMillis,
+          } satisfies TelegramChallengeV1;
+        }),
+      )
+      .handle("createTelegramUnlinkChallenge", ({ payload }) =>
+        Effect.gen(function* () {
+          const { actor, current } = yield* resolveCurrentIdentity();
+          const channelIdentityId = yield* Schema.decodeUnknown(ChannelIdentityId)(
+            payload.channelIdentityId,
+          ).pipe(
+            Effect.mapError(() =>
+              identityBadRequest(
+                current.correlationId,
+                "invalid_channel_identity",
+                "The Telegram identity identifier is invalid.",
+              ),
+            ),
+          );
+          const challenge = yield* createTelegramUnlinkChallenge({
+            actor,
+            channelIdentityId,
+          }).pipe(
+            Effect.mapError((error) => {
+              if (error instanceof ChannelLinkChallengeRateLimited) {
+                return identityRateLimited(current.correlationId, error);
+              }
+              if (
+                error instanceof ChannelIdentityNotFound ||
+                error instanceof IdentityAuthorityNotFound
+              ) {
+                return identityNotFound(current.correlationId);
+              }
+              return identityUnavailable(current.correlationId);
+            }),
+          );
+          return {
+            version: 1,
+            channel: "telegram",
+            purpose: "unlink",
+            token: Redacted.value(challenge.token),
+            deepLink: deepLink("unlink", Redacted.value(challenge.token)),
+            expiresAtMillis: challenge.expiresAtMillis,
+          } satisfies TelegramChallengeV1;
+        }),
+      ),
+  );
+}
 
 function webSessionAuthorizationLayer(config: BetterAuthRuntimeConfig) {
   const authorization = Effect.gen(function* () {
@@ -344,8 +361,9 @@ function platformApiLayer(invocationLayer: Layer.Layer<RuntimeConfig | RuntimeTe
 function identityApiLayer(
   invocationLayer: Layer.Layer<IdentityStore | LinkChallengeCrypto, unknown>,
   betterAuthConfig: BetterAuthRuntimeConfig,
+  telegramBotUsername: string | undefined,
 ) {
-  const handlers = IdentityHandlers.pipe(Layer.provide(invocationLayer));
+  const handlers = identityHandlers(telegramBotUsername).pipe(Layer.provide(invocationLayer));
   const api = HttpApiBuilder.api(IdentityApi).pipe(
     Layer.provide(handlers),
     Layer.provide(webSessionAuthorizationLayer(betterAuthConfig)),
@@ -377,9 +395,10 @@ export function handleIdentityRequest(
   request: Request,
   invocationLayer: Layer.Layer<IdentityStore | LinkChallengeCrypto, unknown>,
   betterAuthConfig: BetterAuthRuntimeConfig,
+  telegramBotUsername?: string,
 ): Promise<Response> {
   const { dispose, handler } = HttpApiBuilder.toWebHandler(
-    identityApiLayer(invocationLayer, betterAuthConfig),
+    identityApiLayer(invocationLayer, betterAuthConfig, telegramBotUsername),
     { middleware: noStore },
   );
 

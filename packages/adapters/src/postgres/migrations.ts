@@ -9,6 +9,8 @@ import { queueOutcomeUnknownMigration } from "./migrations/0004-queue-outcome-un
 import { betterAuthMigration } from "./migrations/0005-better-auth.js";
 import { outboxConsumptionObservabilityMigration } from "./migrations/0006-outbox-consumption-observability.js";
 import { identityFoundationMigration } from "./migrations/0007-identity-foundation.js";
+import { telegramIngressMigration } from "./migrations/0008-telegram-ingress.js";
+import { telegramProcessingMigration } from "./migrations/0009-telegram-processing.js";
 
 const migrationProgram = Migrator.make({})({
   loader: Migrator.fromRecord({
@@ -19,6 +21,8 @@ const migrationProgram = Migrator.make({})({
     "0005_better_auth": betterAuthMigration,
     "0006_outbox_consumption_observability": outboxConsumptionObservabilityMigration,
     "0007_identity_foundation": identityFoundationMigration,
+    "0008_telegram_ingress": telegramIngressMigration,
+    "0009_telegram_processing": telegramProcessingMigration,
   }),
   table: "xpensego_migrations",
 });

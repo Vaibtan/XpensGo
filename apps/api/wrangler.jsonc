@@ -13,6 +13,7 @@
     "ENVIRONMENT": "development",
     "PUBLIC_WEB_ORIGIN": "https://xpensego-web.vaibhav21296.workers.dev",
     "SERVICE_NAME": "xpensego-api",
+    "TELEGRAM_BOT_USERNAME": "",
   },
   "hyperdrive": [
     {
@@ -57,6 +58,7 @@
         "ENVIRONMENT": "staging",
         "PUBLIC_WEB_ORIGIN": "https://xpensego-web-staging.vaibhav21296.workers.dev",
         "SERVICE_NAME": "xpensego-api",
+        "TELEGRAM_BOT_USERNAME": "xpensego_staging_bot",
       },
       "hyperdrive": [
         {

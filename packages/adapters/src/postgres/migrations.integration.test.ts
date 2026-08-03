@@ -38,6 +38,8 @@ describe("PostgreSQL migrations", () => {
         [5, "better_auth"],
         [6, "outbox_consumption_observability"],
         [7, "identity_foundation"],
+        [8, "telegram_ingress"],
+        [9, "telegram_processing"],
       ]);
       expect(secondRun).toEqual([]);
     });

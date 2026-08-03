@@ -56,3 +56,20 @@ staging API Worker. Secret values must not be copied into local files, workflow
 inputs, logs, or documentation. See the
 [Phase 1 staging report](./docs/evidence/phase1-staging.md) for the completed
 provider-backed proof.
+
+## Telegram Worker configuration
+
+The API Worker reads two environment-specific secrets and one public setting:
+
+- `TELEGRAM_WEBHOOK_SECRET` authenticates Telegram webhook requests.
+- `TELEGRAM_BOT_TOKEN` authorizes outbound Bot API calls.
+- `TELEGRAM_BOT_USERNAME` is the public BotFather username used to construct one-use onboarding deep links. It is committed in the environment-specific `vars` within `apps/api/wrangler.jsonc`; staging uses `xpensego_staging_bot`, while development leaves the value empty until it has a separate bot.
+
+Set both secrets through Wrangler's interactive prompt; never place either value in a command argument, local environment file, GitHub Actions variable, or committed configuration. From the repository root, configure staging with:
+
+```powershell
+npx wrangler secret put TELEGRAM_WEBHOOK_SECRET --env staging --config apps/api/wrangler.jsonc
+npx wrangler secret put TELEGRAM_BOT_TOKEN --env staging --config apps/api/wrangler.jsonc
+```
+
+Omit `--env staging` only when intentionally configuring the separate development Worker. Secret creation alone does not register the webhook. Registration and real provider acceptance are tracked separately so local implementation evidence cannot be mistaken for a deployed Telegram proof.

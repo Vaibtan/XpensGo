@@ -2,7 +2,7 @@
 
 **Authorities:** [Product Document](./xpensego-product-doc.md) · [PRD](./PRD.md) · [Technical Specification](./SPEC.md) · [Domain Context](./CONTEXT.md)
 
-**Status:** The minimal platform tracer has provider-backed staging evidence. Identity and personal-ledger prerequisites are implemented and verified locally; Telegram ingress, recovery email, transaction behavior, and external-user readiness remain open.
+**Status:** The minimal platform tracer has provider-backed staging evidence. Identity, personal-ledger prerequisites, and the Telegram adapter are verified locally; Telegram provider acceptance, recovery email, transaction behavior, and external-user readiness remain open.
 
 **Execution rule:** Complete phases in order except where a track is explicitly marked parallel. A phase closes only when its exit evidence is linked.
 
@@ -100,12 +100,16 @@ Decision ownership is role-based until named operators are added to the project:
 
 ### Telegram ingress and durable replies
 
-- [ ] Register the staging webhook and verify its configured secret before expensive parsing.
-- [ ] Decode supported text updates at the boundary; reject oversized, unsupported, and unsafe group-chat operations without exposing personal data.
-- [ ] Persist and deduplicate `update_id`, then write the inbound event and dispatch outbox record in one PostgreSQL transaction before acknowledgement.
-- [ ] Queue and normalize the event through the shared channel contract, resolve identity server-side, and enforce per-identity and system-wide abuse limits.
-- [ ] Persist each reply intent and delivery outbox record before sending; record attempt, platform acceptance, failure, and outcome-unknown separately.
-- [ ] Reconcile ambiguous Telegram outcomes when provider evidence exists; otherwise suppress blind duplicate sends and expose bounded operator recovery.
+- [x] Verify the configured webhook secret before reading the body or opening a database connection.
+- [ ] Register the staging webhook and capture provider-backed secret-verification evidence.
+- [x] Decode supported private text updates at the boundary; reject oversized, malformed, unsupported, and unsafe group-chat operations without exposing personal data.
+- [x] Persist and deduplicate `update_id`, then write the inbound event and dispatch outbox record in one PostgreSQL transaction before acknowledgement.
+- [x] Queue and normalize the event through the shared channel contract, resolve identity server-side, and enforce per-identity and system-wide abuse limits.
+- [x] Persist each reply intent and delivery outbox record before sending; record attempt, platform acceptance, transient failure, terminal failure, and outcome-unknown separately.
+- [x] Suppress blind duplicate sends after an ambiguous Telegram provider outcome or an expired provider-attempt lease.
+- [ ] Capture real provider acceptance/rejection evidence and add an explicit operator recovery policy for terminal delivery records.
+
+**Telegram adapter evidence (local):** [Telegram webhook, processing, and reply adapter](./docs/evidence/telegram-adapter-local.md). Staging registration and real Bot API delivery remain provider-backed acceptance work.
 
 ### Manual capture and ledger control
 

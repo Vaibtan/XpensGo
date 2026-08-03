@@ -34,6 +34,12 @@ function databaseForbiddenEnv(): CloudflareBindings {
   return bindings;
 }
 
+function telegramDatabaseForbiddenEnv(secret: string): CloudflareBindings {
+  const bindings = databaseForbiddenEnv();
+  Object.defineProperty(bindings, "TELEGRAM_WEBHOOK_SECRET", { value: secret });
+  return bindings;
+}
+
 function defectiveRuntimeEnv(): CloudflareBindings {
   const bindings: CloudflareBindings = { ...env };
 
@@ -59,6 +65,11 @@ const validProbeCommand = {
   ledgerId: "34502fb7-d5c9-4a30-a480-54c66583240a",
   otherOwnerUserId: "8ed91076-bdf7-4406-8579-d8031dca3267",
 } as const;
+
+function makeWorkerRequest(url: string, init?: RequestInit): Parameters<typeof worker.fetch>[0] {
+  // SAFETY: the Workers test pool constructs the same runtime Request but exposes a wider cf generic.
+  return new Request(url, init) as Parameters<typeof worker.fetch>[0];
+}
 
 describe("Xpensego API Worker", () => {
   it("serves a versioned status response through the real fetch entrypoint", async () => {
@@ -125,18 +136,65 @@ describe("Xpensego API Worker", () => {
   it("serves database-free routes without reading the Hyperdrive binding", async () => {
     const bindings = databaseForbiddenEnv();
     const statusResponse = await worker.fetch(
-      new Request("https://xpensego.test/v1/platform/status") as Parameters<typeof worker.fetch>[0],
+      makeWorkerRequest("https://xpensego.test/v1/platform/status"),
       bindings,
       createExecutionContext(),
     );
     const openApiResponse = await worker.fetch(
-      new Request("https://xpensego.test/v1/openapi.json") as Parameters<typeof worker.fetch>[0],
+      makeWorkerRequest("https://xpensego.test/v1/openapi.json"),
       bindings,
       createExecutionContext(),
     );
 
     expect(statusResponse.status).toBe(200);
     expect(openApiResponse.status).toBe(200);
+  });
+
+  it("rejects an invalid Telegram webhook secret before acquiring database resources", async () => {
+    const response = await worker.fetch(
+      makeWorkerRequest("https://xpensego.test/v1/channels/telegram/webhook", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-telegram-bot-api-secret-token": "wrong-secret",
+        },
+        body: "{}",
+      }),
+      telegramDatabaseForbiddenEnv("configured-telegram-secret"),
+      createExecutionContext(),
+    );
+
+    expect(response.status).toBe(401);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(await response.json()).toEqual({ ok: false, error: "unauthorized" });
+  });
+
+  it("acknowledges an authenticated group update without reading personal data stores", async () => {
+    const webhookSecret = "configured-telegram-secret";
+    const response = await worker.fetch(
+      makeWorkerRequest("https://xpensego.test/v1/channels/telegram/webhook", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-telegram-bot-api-secret-token": webhookSecret,
+        },
+        body: JSON.stringify({
+          update_id: 9001,
+          message: {
+            message_id: 22,
+            date: 1_785_638_401,
+            chat: { id: -100_123_456, type: "supergroup" },
+            from: { id: 123_456, is_bot: false },
+            text: "show my ledger",
+          },
+        }),
+      }),
+      telegramDatabaseForbiddenEnv(webhookSecret),
+      createExecutionContext(),
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ ok: true, status: "ignored" });
   });
 
   it("returns a safe versioned not-found response", async () => {
@@ -159,14 +217,14 @@ describe("Xpensego API Worker", () => {
 
   it("does not expose the staging acceptance driver in development", async () => {
     const response = await worker.fetch(
-      new Request("https://xpensego.test/_internal/phase1-staging-proof", {
+      makeWorkerRequest("https://xpensego.test/_internal/phase1-staging-proof", {
         method: "POST",
         headers: {
           authorization: `Bearer ${validProbeBindings.PHASE1_PROBE_SECRET}`,
           "content-type": "application/json",
         },
         body: JSON.stringify(validProbeCommand),
-      }) as Parameters<typeof worker.fetch>[0],
+      }),
       {
         ...env,
         ...validProbeBindings,
@@ -179,14 +237,14 @@ describe("Xpensego API Worker", () => {
 
   it("hides the staging acceptance driver when authorization is invalid", async () => {
     const response = await worker.fetch(
-      new Request("https://xpensego.test/_internal/phase1-staging-proof", {
+      makeWorkerRequest("https://xpensego.test/_internal/phase1-staging-proof", {
         method: "POST",
         headers: {
           authorization: "Bearer wrong-secret",
           "content-type": "application/json",
         },
         body: JSON.stringify(validProbeCommand),
-      }) as Parameters<typeof worker.fetch>[0],
+      }),
       {
         ...env,
         ENVIRONMENT: "staging",
@@ -200,14 +258,14 @@ describe("Xpensego API Worker", () => {
 
   it("rejects a probe configuration that reuses its authorization secret for signing", async () => {
     const response = await worker.fetch(
-      new Request("https://xpensego.test/_internal/phase1-staging-proof", {
+      makeWorkerRequest("https://xpensego.test/_internal/phase1-staging-proof", {
         method: "POST",
         headers: {
           authorization: `Bearer ${validProbeBindings.PHASE1_PROBE_SECRET}`,
           "content-type": "application/json",
         },
         body: JSON.stringify(validProbeCommand),
-      }) as Parameters<typeof worker.fetch>[0],
+      }),
       {
         ...env,
         ENVIRONMENT: "staging",

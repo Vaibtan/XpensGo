@@ -12,6 +12,12 @@
     "./postgres/isolated-test-database": "./src/postgres/isolated-test-database.ts",
     "./postgres/migrations": "./src/postgres/migrations.ts",
     "./postgres/outbox-store": "./src/postgres/outbox-store.ts",
+    "./postgres/telegram-ingress-store": "./src/postgres/telegram-ingress-store.ts",
+    "./postgres/telegram-queue-runtime": "./src/postgres/telegram-queue-runtime.ts",
+    "./telegram/bot-api": "./src/telegram/bot-api.ts",
+    "./telegram/deep-link": "./src/telegram/deep-link.ts",
+    "./postgres/telegram-event-processing-store": "./src/postgres/telegram-event-processing-store.ts",
+    "./postgres/telegram-delivery-store": "./src/postgres/telegram-delivery-store.ts",
     "./web-crypto/link-challenge-crypto": "./src/web-crypto/link-challenge-crypto.ts"
   },
   "scripts": {

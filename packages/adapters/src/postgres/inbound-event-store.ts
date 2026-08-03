@@ -57,6 +57,9 @@ export const make = Effect.gen(function* () {
           external_event_id,
           idempotency_key,
           correlation_id
+          , processing_status
+          , processing_outcome
+          , processed_at
         )
         VALUES (
           ${input.ownerUserId},
@@ -65,6 +68,9 @@ export const make = Effect.gen(function* () {
           ${input.externalEventId},
           ${input.idempotencyKey},
           ${input.correlationId}
+          , 'processed'
+          , 'legacy_accepted'
+          , CURRENT_TIMESTAMP
         )
         ON CONFLICT (channel, external_event_id) DO NOTHING
         RETURNING id AS "inboundEventId"

@@ -12,6 +12,9 @@ type IsolatedTestDatabaseName =
   | "xpensego_identity_store_integration"
   | "xpensego_migration_integration"
   | "xpensego_outbox_store_integration"
+  | "xpensego_telegram_ingress_integration"
+  | "xpensego_telegram_processing_integration"
+  | "xpensego_telegram_delivery_integration"
   | "xpensego_worker_outbox_integration";
 
 function parseLoopbackTestUrl(rawUrl: string, variableName: string): URL {

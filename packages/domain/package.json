@@ -6,7 +6,12 @@
   "exports": {
     "./category/default-categories": "./src/category/default-categories.ts",
     "./channel/accept-inbound-event": "./src/channel/accept-inbound-event.ts",
+    "./channel/accept-telegram-event": "./src/channel/accept-telegram-event.ts",
+    "./channel/deliver-telegram-reply": "./src/channel/deliver-telegram-reply.ts",
     "./channel/inbound-event": "./src/channel/inbound-event.ts",
+    "./channel/outbound-channel-intent": "./src/channel/outbound-channel-intent.ts",
+    "./channel/process-telegram-event": "./src/channel/process-telegram-event.ts",
+    "./channel/telegram-event": "./src/channel/telegram-event.ts",
     "./identity/actor-context": "./src/identity/actor-context.ts",
     "./identity/channel-identity": "./src/identity/channel-identity.ts",
     "./identity/identity": "./src/identity/identity.ts",

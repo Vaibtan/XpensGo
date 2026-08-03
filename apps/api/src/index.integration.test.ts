@@ -4,6 +4,7 @@ import {
   createScheduledController,
   env,
   getQueueResult,
+  waitOnExecutionContext,
 } from "cloudflare:test";
 import { PgClient } from "@effect/sql-pg";
 import { makePostgresInboundEventStoreLayer } from "@xpensego/adapters/postgres/inbound-event-store";
@@ -78,6 +79,7 @@ const TelegramChallengeResponse = Schema.Struct({
   channel: Schema.Literal("telegram"),
   purpose: Schema.Literal("link", "unlink"),
   token: Schema.String.pipe(Schema.length(43)),
+  deepLink: Schema.NullOr(Schema.String),
   expiresAtMillis: Schema.Number,
 });
 
@@ -122,6 +124,9 @@ function makeIntegrationEnv(queue: Queue<unknown>): CloudflareBindings & {
   readonly BUILD_REVISION: string;
   readonly PHASE1_PROBE_SECRET: string;
   readonly PHASE1_PROBE_SIGNING_SECRET: string;
+  readonly TELEGRAM_BOT_TOKEN: string;
+  readonly TELEGRAM_BOT_USERNAME: "xpensego_staging_bot";
+  readonly TELEGRAM_WEBHOOK_SECRET: string;
 } {
   return {
     ...env,
@@ -129,6 +134,9 @@ function makeIntegrationEnv(queue: Queue<unknown>): CloudflareBindings & {
     BUILD_REVISION: "0123456789abcdef0123456789abcdef01234567",
     PHASE1_PROBE_SECRET: "phase1-probe-secret-that-is-at-least-32-characters",
     PHASE1_PROBE_SIGNING_SECRET: "phase1-probe-signing-secret-that-is-at-least-32-characters",
+    TELEGRAM_BOT_TOKEN: "123456789:integration-telegram-bot-token",
+    TELEGRAM_BOT_USERNAME: "xpensego_staging_bot",
+    TELEGRAM_WEBHOOK_SECRET: "integration_telegram_webhook_secret",
     HYPERDRIVE: {
       ...env.HYPERDRIVE,
       connectionString: Redacted.value(testDatabase.runtimeUrl),
@@ -215,6 +223,128 @@ afterEach(async () => {
 });
 
 describe("API Worker outbox integration", () => {
+  it("accepts and deduplicates a verified Telegram update before background Queue publication", async () => {
+    const queue = new RecordingQueue();
+    const integrationEnv = makeIntegrationEnv(queue);
+    const webhookUrl = `${integrationEnv.PUBLIC_WEB_ORIGIN}/v1/channels/telegram/webhook`;
+    const body = JSON.stringify({
+      update_id: 8183,
+      message: {
+        message_id: 101,
+        date: 1_785_638_402,
+        chat: { id: 123_456, type: "private" },
+        from: { id: 123_456, is_bot: false },
+        text: "Spent 250 on lunch",
+      },
+    });
+    const deliver = async () => {
+      const context = createExecutionContext();
+      const response = await worker.fetch(
+        makeWorkerRequest(webhookUrl, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-telegram-bot-api-secret-token": integrationEnv.TELEGRAM_WEBHOOK_SECRET,
+          },
+          body,
+        }),
+        integrationEnv,
+        context,
+      );
+      await waitOnExecutionContext(context);
+      return response;
+    };
+
+    const first = await deliver();
+    const duplicate = await deliver();
+
+    expect(first.status).toBe(200);
+    expect(await first.json()).toEqual({ ok: true, status: "accepted" });
+    expect(await duplicate.json()).toEqual({ ok: true, status: "duplicate" });
+    expect(queue.messages).toHaveLength(1);
+
+    const persisted = await Effect.runPromise(
+      Effect.gen(function* () {
+        const sql = yield* PgClient.PgClient;
+        const [row] = yield* sql<{
+          readonly eventCount: number;
+          readonly outboxCount: number;
+          readonly normalizedPayload: unknown;
+          readonly ownerUserId: string | null;
+        }>`
+          SELECT
+            (SELECT count(*)::integer FROM inbound_channel_events) AS "eventCount",
+            (SELECT count(*)::integer FROM outbox_messages) AS "outboxCount",
+            normalized_payload AS "normalizedPayload",
+            owner_user_id AS "ownerUserId"
+          FROM inbound_channel_events
+          WHERE channel = 'telegram' AND external_event_id = '8183'
+        `;
+        return row;
+      }).pipe(Effect.provide(migrationClientLayer), Effect.scoped),
+    );
+    expect(persisted).toMatchObject({
+      eventCount: 1,
+      outboxCount: 1,
+      ownerUserId: null,
+      normalizedPayload: {
+        version: 1,
+        updateId: "8183",
+        content: { _tag: "Text", text: "Spent 250 on lunch" },
+      },
+    });
+
+    const ingressJob = Schema.decodeUnknownSync(OutboxJobV1)(queue.messages[0]);
+    const ingressBatch = createMessageBatch("xpensego-platform-jobs-development", [
+      {
+        id: "telegram-ingress-delivery",
+        timestamp: new Date("2026-08-02T00:00:00.000Z"),
+        attempts: 1,
+        body: ingressJob,
+      },
+    ]);
+    const ingressContext = createExecutionContext();
+    await worker.queue(ingressBatch, integrationEnv, ingressContext);
+    expect((await getQueueResult(ingressBatch, ingressContext)).explicitAcks).toEqual([
+      "telegram-ingress-delivery",
+    ]);
+
+    await runScheduled(queue);
+    expect(queue.messages).toHaveLength(2);
+    const replyJob = Schema.decodeUnknownSync(OutboxJobV1)(queue.messages[1]);
+    expect(replyJob.outboxMessageId).not.toBe(ingressJob.outboxMessageId);
+    const processed = await Effect.runPromise(
+      Effect.gen(function* () {
+        const sql = yield* PgClient.PgClient;
+        const [row] = yield* sql<{
+          readonly eventStatus: string;
+          readonly intent: unknown;
+          readonly replyCount: number;
+          readonly replyOutboxStatus: string;
+        }>`
+          SELECT
+            event.processing_status AS "eventStatus",
+            reply.intent,
+            (SELECT count(*)::integer FROM outbound_channel_messages) AS "replyCount",
+            outbox.status AS "replyOutboxStatus"
+          FROM inbound_channel_events AS event
+          INNER JOIN outbound_channel_messages AS reply
+            ON reply.inbound_event_id = event.id
+          INNER JOIN outbox_messages AS outbox
+            ON outbox.outbound_message_id = reply.id
+          WHERE event.external_event_id = '8183'
+        `;
+        return row;
+      }).pipe(Effect.provide(migrationClientLayer), Effect.scoped),
+    );
+    expect(processed).toMatchObject({
+      eventStatus: "processed",
+      replyCount: 1,
+      replyOutboxStatus: "published",
+      intent: { content: { _tag: "LinkRequired" } },
+    });
+  });
+
   it("drives concurrent acceptance and recoverable Queue delivery through the staging probe", async () => {
     const queue = new RecordingQueue();
     const probeEnv = {
@@ -454,6 +584,9 @@ describe("API Worker outbox integration", () => {
     );
     expect(challengeResponse.status).toBe(201);
     expect(challenge).toMatchObject({ channel: "telegram", purpose: "link" });
+    expect(challenge.deepLink).toBe(
+      `https://t.me/${integrationEnv.TELEGRAM_BOT_USERNAME}?start=link_${challenge.token}`,
+    );
     expect(challenge.expiresAtMillis).toBeGreaterThan(Date.now());
 
     await Effect.runPromise(

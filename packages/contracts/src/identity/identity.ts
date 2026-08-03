@@ -37,6 +37,9 @@ export const TelegramChallengeV1 = Schema.Struct({
   channel: Schema.Literal("telegram"),
   purpose: Schema.Literal("link", "unlink"),
   token: Schema.String.pipe(Schema.length(43), Schema.pattern(/^[A-Za-z0-9_-]+$/)),
+  deepLink: Schema.NullOr(
+    Schema.String.pipe(Schema.pattern(/^https:\/\/t\.me\/[A-Za-z][A-Za-z0-9_]{4,31}\?start=/)),
+  ),
   expiresAtMillis: Schema.Number.pipe(Schema.int(), Schema.nonNegative()),
 });
 

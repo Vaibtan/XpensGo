@@ -228,6 +228,18 @@ export interface ConsumeTelegramLinkChallengeInput {
   readonly correlationId: CorrelationId;
 }
 
+/** Internal input after verified ingress has replaced raw challenge material with its digest. */
+export interface ConsumeTelegramChallengeDigestInput {
+  /** SHA-256 digest produced before the inbound event was persisted. */
+  readonly tokenDigest: ChannelLinkChallengeDigest;
+
+  /** Verified Telegram user identifier supplied by the channel adapter. */
+  readonly externalAccountId: TelegramExternalAccountId;
+
+  /** Correlation identifier propagated from channel ingress. */
+  readonly correlationId: CorrelationId;
+}
+
 /** Successful first link of a Telegram identity. */
 export interface TelegramIdentityLinked {
   readonly _tag: "TelegramIdentityLinked";
@@ -448,31 +460,42 @@ export const createTelegramLinkChallenge = Effect.fn("Identity.createTelegramLin
   },
 );
 
+/** Consume one already-minimized Telegram link command at the asynchronous ingress boundary. */
+export const consumeTelegramLinkChallengeDigest = Effect.fn(
+  "Identity.consumeTelegramLinkChallengeDigest",
+)(function* (input: ConsumeTelegramChallengeDigestInput) {
+  const store = yield* IdentityStore;
+  const outcome = yield* store.consumeTelegramLinkChallenge({
+    tokenDigest: input.tokenDigest,
+    externalAccountId: input.externalAccountId,
+    correlationId: input.correlationId,
+    consumedAtMillis: EpochMillis.make(yield* Clock.currentTimeMillis),
+  });
+
+  switch (outcome._tag) {
+    case "TelegramIdentityLinked":
+      return outcome;
+    case "ChallengeNotFound":
+      return yield* new ChannelLinkChallengeNotFound();
+    case "ChallengeExpired":
+      return yield* new ChannelLinkChallengeExpired();
+    case "ChallengeAlreadyConsumed":
+      return yield* new ChannelLinkChallengeAlreadyConsumed();
+    case "TelegramIdentityAlreadyLinked":
+      return yield* new TelegramIdentityAlreadyLinked();
+  }
+});
+
 /** Consume one verified Telegram link command without trusting client-owned User scope. */
 export const consumeTelegramLinkChallenge = Effect.fn("Identity.consumeTelegramLinkChallenge")(
   function* (input: ConsumeTelegramLinkChallengeInput) {
     const crypto = yield* LinkChallengeCrypto;
-    const store = yield* IdentityStore;
     const tokenDigest = yield* crypto.digestToken(input.token);
-    const outcome = yield* store.consumeTelegramLinkChallenge({
+    return yield* consumeTelegramLinkChallengeDigest({
       tokenDigest,
       externalAccountId: input.externalAccountId,
       correlationId: input.correlationId,
-      consumedAtMillis: EpochMillis.make(yield* Clock.currentTimeMillis),
     });
-
-    switch (outcome._tag) {
-      case "TelegramIdentityLinked":
-        return outcome;
-      case "ChallengeNotFound":
-        return yield* new ChannelLinkChallengeNotFound();
-      case "ChallengeExpired":
-        return yield* new ChannelLinkChallengeExpired();
-      case "ChallengeAlreadyConsumed":
-        return yield* new ChannelLinkChallengeAlreadyConsumed();
-      case "TelegramIdentityAlreadyLinked":
-        return yield* new TelegramIdentityAlreadyLinked();
-    }
   },
 );
 
@@ -505,33 +528,44 @@ export const createTelegramUnlinkChallenge = Effect.fn("Identity.createTelegramU
   },
 );
 
+/** Consume one already-minimized Telegram unlink command at the asynchronous ingress boundary. */
+export const consumeTelegramUnlinkChallengeDigest = Effect.fn(
+  "Identity.consumeTelegramUnlinkChallengeDigest",
+)(function* (input: ConsumeTelegramChallengeDigestInput) {
+  const store = yield* IdentityStore;
+  const outcome = yield* store.consumeTelegramUnlinkChallenge({
+    tokenDigest: input.tokenDigest,
+    externalAccountId: input.externalAccountId,
+    correlationId: input.correlationId,
+    consumedAtMillis: EpochMillis.make(yield* Clock.currentTimeMillis),
+  });
+
+  switch (outcome._tag) {
+    case "TelegramIdentityUnlinked":
+      return outcome;
+    case "ChallengeNotFound":
+      return yield* new ChannelLinkChallengeNotFound();
+    case "ChallengeExpired":
+      return yield* new ChannelLinkChallengeExpired();
+    case "ChallengeAlreadyConsumed":
+      return yield* new ChannelLinkChallengeAlreadyConsumed();
+    case "TelegramIdentityDoesNotMatchChallenge":
+      return yield* new TelegramIdentityDoesNotMatchChallenge();
+    case "ChannelIdentityNotFound":
+      return yield* new ChannelIdentityNotFound();
+  }
+});
+
 /** Consume one verified Telegram unlink command and retain its historical link record. */
 export const consumeTelegramUnlinkChallenge = Effect.fn("Identity.consumeTelegramUnlinkChallenge")(
   function* (input: ConsumeTelegramLinkChallengeInput) {
     const crypto = yield* LinkChallengeCrypto;
-    const store = yield* IdentityStore;
     const tokenDigest = yield* crypto.digestToken(input.token);
-    const outcome = yield* store.consumeTelegramUnlinkChallenge({
+    return yield* consumeTelegramUnlinkChallengeDigest({
       tokenDigest,
       externalAccountId: input.externalAccountId,
       correlationId: input.correlationId,
-      consumedAtMillis: EpochMillis.make(yield* Clock.currentTimeMillis),
     });
-
-    switch (outcome._tag) {
-      case "TelegramIdentityUnlinked":
-        return outcome;
-      case "ChallengeNotFound":
-        return yield* new ChannelLinkChallengeNotFound();
-      case "ChallengeExpired":
-        return yield* new ChannelLinkChallengeExpired();
-      case "ChallengeAlreadyConsumed":
-        return yield* new ChannelLinkChallengeAlreadyConsumed();
-      case "TelegramIdentityDoesNotMatchChallenge":
-        return yield* new TelegramIdentityDoesNotMatchChallenge();
-      case "ChannelIdentityNotFound":
-        return yield* new ChannelIdentityNotFound();
-    }
   },
 );
 

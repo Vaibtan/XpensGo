@@ -37,9 +37,8 @@ npm run check
 npm run test:integration
 ```
 
-## Remaining provider-backed work
+## Provider-backed status and remaining work
 
-- The staging Worker secrets, public bot username, webhook registration, authenticated duplicate ingress, and explicit Bot API rejection are now evidenced in the [Telegram staging report](./telegram-staging.md).
-- Apply migration `0010_telegram_delivery_recovery`, provision the staging Queue-write token, and execute the audited terminal-recovery workflow once.
-- Capture a real Bot API acceptance from a valid private staging chat. Automatic resend remains prohibited when prior acceptance is uncertain.
+- The staging Worker secrets, public bot username, Telegram-origin authenticated ingress, duplicate handling, provider acceptance and explicit rejection, and the bounded recovery workflow are now evidenced in the [Telegram staging report](./telegram-staging.md).
+- Automatic resend remains prohibited when prior acceptance is uncertain; staging ambiguity is covered deterministically rather than induced against the real provider.
 - Implement transaction parsing and ledger mutation. The current adapter deliberately does not imply that an accepted text message created an expense.

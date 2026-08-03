@@ -2,7 +2,7 @@
 
 **Authorities:** [Product Document](./xpensego-product-doc.md) · [PRD](./PRD.md) · [Technical Specification](./SPEC.md) · [Domain Context](./CONTEXT.md)
 
-**Status:** The minimal platform tracer has provider-backed staging evidence. Identity, personal-ledger prerequisites, and the Telegram adapter are verified locally; Telegram provider acceptance, recovery email, transaction behavior, and external-user readiness remain open.
+**Status:** The minimal platform tracer and Telegram adapter have provider-backed staging evidence. Identity and personal-ledger prerequisites are verified locally; recovery email, transaction behavior, deployed identity acceptance, and external-user readiness remain open.
 
 **Execution rule:** Complete phases in order except where a track is explicitly marked parallel. A phase closes only when its exit evidence is linked.
 
@@ -101,15 +101,15 @@ Decision ownership is role-based until named operators are added to the project:
 ### Telegram ingress and durable replies
 
 - [x] Verify the configured webhook secret before reading the body or opening a database connection.
-- [ ] Register the staging webhook and capture provider-backed secret-verification evidence.
+- [x] Register the staging webhook and capture provider-backed secret-verification evidence.
 - [x] Decode supported private text updates at the boundary; reject oversized, malformed, unsupported, and unsafe group-chat operations without exposing personal data.
 - [x] Persist and deduplicate `update_id`, then write the inbound event and dispatch outbox record in one PostgreSQL transaction before acknowledgement.
 - [x] Queue and normalize the event through the shared channel contract, resolve identity server-side, and enforce per-identity and system-wide abuse limits.
 - [x] Persist each reply intent and delivery outbox record before sending; record attempt, platform acceptance, transient failure, terminal failure, and outcome-unknown separately.
 - [x] Suppress blind duplicate sends after an ambiguous Telegram provider outcome or an expired provider-attempt lease.
-- [ ] Capture real provider acceptance/rejection evidence and add an explicit operator recovery policy for terminal delivery records.
+- [x] Capture real provider acceptance/rejection evidence and add an explicit operator recovery policy for terminal delivery records.
 
-**Telegram adapter evidence:** [local webhook, processing, and reply adapter](./docs/evidence/telegram-adapter-local.md) · [staging webhook, duplicate, rejection, and recovery evidence](./docs/evidence/telegram-staging.md). Real Bot API acceptance and live recovery execution remain open.
+**Telegram adapter evidence:** [local webhook, processing, and reply adapter](./docs/evidence/telegram-adapter-local.md) · [staging webhook, duplicate, acceptance, rejection, and recovery evidence](./docs/evidence/telegram-staging.md).
 
 ### Manual capture and ledger control
 

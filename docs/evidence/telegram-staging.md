@@ -38,9 +38,11 @@ Explicit `terminal_failure` is recoverable only through the `Recover Telegram de
 
 The administrative PostgreSQL transaction refuses `provider_accepted`, `outcome_unknown`, mismatched errors, active records, and records at the three-attempt ceiling. It writes an audit row before reusing the existing content-minimized outbox job. A repeated workflow run is idempotent; an uncertain Queue publication may enqueue a duplicate job, but the provider-attempt claim still permits only one Bot API call. The Worker runtime role has no access to the recovery table.
 
+[Managed migration run 30799638816](https://github.com/Vaibtan/XpensGo/actions/runs/30799638816) applied `0010_telegram_delivery_recovery` to staging from revision `26916c3365b620198d64618981c8448bd854fdd9`. A direct Neon verification found the recovery table present and `has_table_privilege('xpensego_runtime', 'telegram_delivery_recoveries', 'SELECT') = false`.
+
 ## Open acceptance evidence
 
 - Send a real private `hello` message to `@xpensego_staging_bot` and retain the durable `provider_accepted` record plus the visible bot reply.
-- Apply migration `0010_telegram_delivery_recovery`, configure the least-privilege Queue API token, and run the recovery workflow once against the controlled terminal record above.
+- Configure the least-privilege Queue API token and run the recovery workflow once against the controlled terminal record above.
 
 Until both observations are recorded, real provider acceptance and live operator recovery remain open even though the deterministic implementation is complete.

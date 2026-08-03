@@ -8,6 +8,7 @@
     "deploy:staging": "wrangler deploy --env staging",
     "dev": "wrangler dev",
     "proof:phase1:staging": "tsx scripts/phase1-staging-proof.ts",
+    "operator:telegram:recover": "tsx scripts/recover-telegram-delivery.ts",
     "test": "vitest run",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "typecheck": "npm run types && tsc --noEmit && tsc --noEmit -p tsconfig.scripts.json",
@@ -22,6 +23,7 @@
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "0.19.1",
+    "@effect/platform-node": "0.108.1",
     "@effect/sql-pg": "0.53.0",
     "@xpensego/config": "0.1.0",
     "@xpensego/testing": "0.1.0",

@@ -7,12 +7,18 @@ import {
   TelegramMaximumDeliveryAttempts,
 } from "@xpensego/domain/channel/deliver-telegram-reply";
 import { OutboundChannelMessageId } from "@xpensego/domain/channel/outbound-channel-intent";
-import { Effect, Schema } from "effect";
+import {
+  TelegramDeliveryRecoveryExpectedErrorCode,
+  TelegramDeliveryRecoveryId,
+  TelegramDeliveryRecoveryStore,
+} from "@xpensego/domain/channel/recover-telegram-delivery";
+import { Effect, Layer, Schema } from "effect";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { makeIsolatedTestDatabase } from "./isolated-test-database.js";
 import { runMigrations } from "./migrations.js";
 import { makePostgresTelegramDeliveryStoreLayer } from "./telegram-delivery-store.js";
+import { makePostgresTelegramDeliveryRecoveryStoreLayer } from "./telegram-delivery-recovery-store.js";
 
 const testDatabase = makeIsolatedTestDatabase("xpensego_telegram_delivery_integration");
 const fixtureClientLayer = PgClient.layer({
@@ -21,6 +27,8 @@ const fixtureClientLayer = PgClient.layer({
   maxConnections: 1,
 });
 const deliveryLayer = makePostgresTelegramDeliveryStoreLayer(testDatabase.runtimeUrl);
+const recoveryLayer = makePostgresTelegramDeliveryRecoveryStoreLayer(testDatabase.migrationUrl);
+const deliveryAndRecoveryLayer = Layer.merge(deliveryLayer, recoveryLayer);
 const policy = {
   maximumAttempts: TelegramMaximumDeliveryAttempts.make(3),
   leaseSeconds: TelegramDeliveryLeaseSeconds.make(60),
@@ -122,6 +130,21 @@ async function createReplyFixture(suffix: string) {
     }).pipe(Effect.provide(fixtureClientLayer), Effect.scoped),
   );
   return row;
+}
+
+function recoveryInput(
+  recoveryId: string,
+  outboundMessageId: typeof OutboundChannelMessageId.Type,
+) {
+  return {
+    recoveryId: Schema.decodeUnknownSync(TelegramDeliveryRecoveryId)(recoveryId),
+    outboundMessageId,
+    expectedErrorCode: Schema.decodeUnknownSync(TelegramDeliveryRecoveryExpectedErrorCode)(
+      "telegram_http_400",
+    ),
+    reason: "recipient_state_corrected",
+    maximumAttempts: policy.maximumAttempts,
+  } as const;
 }
 
 describe("PostgreSQL Telegram delivery store", () => {
@@ -245,5 +268,126 @@ describe("PostgreSQL Telegram delivery store", () => {
     expect(states.unknown._tag).toBe("Claimed");
     expect(states.retried._tag).toBe("Claimed");
     expect(states.suppressed).toEqual({ _tag: "Terminal" });
+  });
+
+  it("prepares one terminal rejection for idempotent operator redelivery", async () => {
+    const fixture = await createReplyFixture("9005");
+    const input = recoveryInput("github-run-9005", fixture.outboundMessageId);
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const delivery = yield* TelegramDeliveryStore;
+        const recovery = yield* TelegramDeliveryRecoveryStore;
+        const claimed = yield* delivery.claim({ outboxMessageId: fixture.outboxMessageId, policy });
+        if (claimed._tag !== "Claimed") {
+          return yield* Effect.dieMessage("Expected the fixture delivery to be claimable");
+        }
+        yield* delivery.completeAttempt({
+          attemptId: claimed.attemptId,
+          outboundMessageId: claimed.outboundMessageId,
+          outcome: { _tag: "TerminalFailure", errorCode: "telegram_http_400" },
+        });
+        const prepared = yield* recovery.prepare(input);
+        const redelivery = yield* delivery.claim({
+          outboxMessageId: fixture.outboxMessageId,
+          policy,
+        });
+        const marked = yield* recovery.markPublished({ recoveryId: input.recoveryId });
+        const replay = yield* recovery.prepare(input);
+        return { claimed, prepared, redelivery, marked, replay };
+      }).pipe(Effect.provide(deliveryAndRecoveryLayer), Effect.scoped),
+    );
+
+    expect(result.claimed._tag).toBe("Claimed");
+    expect(result.prepared).toMatchObject({
+      _tag: "Prepared",
+      publicationStatus: "prepared",
+      outboxMessageId: fixture.outboxMessageId,
+    });
+    expect(result.redelivery._tag).toBe("Claimed");
+    expect(result.marked).toEqual({ _tag: "Published" });
+    expect(result.replay).toMatchObject({
+      _tag: "Prepared",
+      publicationStatus: "published",
+      outboxMessageId: fixture.outboxMessageId,
+    });
+  });
+
+  it("never recovers an outcome-unknown provider attempt", async () => {
+    const fixture = await createReplyFixture("9006");
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const delivery = yield* TelegramDeliveryStore;
+        const recovery = yield* TelegramDeliveryRecoveryStore;
+        const claimed = yield* delivery.claim({ outboxMessageId: fixture.outboxMessageId, policy });
+        if (claimed._tag !== "Claimed") {
+          return { _tag: "Unexpected" } as const;
+        }
+        yield* delivery.completeAttempt({
+          attemptId: claimed.attemptId,
+          outboundMessageId: claimed.outboundMessageId,
+          outcome: { _tag: "OutcomeUnknown", errorCode: "network_outcome_unknown" },
+        });
+        return yield* recovery.prepare(recoveryInput("github-run-9006", fixture.outboundMessageId));
+      }).pipe(Effect.provide(deliveryAndRecoveryLayer), Effect.scoped),
+    );
+
+    expect(result).toEqual({ _tag: "NotRecoverable", reason: "outcome_unknown" });
+  });
+
+  it("allows no further operator retry after the provider-attempt ceiling", async () => {
+    const fixture = await createReplyFixture("9007");
+    const finalRecovery = await Effect.runPromise(
+      Effect.gen(function* () {
+        const delivery = yield* TelegramDeliveryStore;
+        const recovery = yield* TelegramDeliveryRecoveryStore;
+
+        for (let attemptNumber = 1; attemptNumber <= 3; attemptNumber += 1) {
+          const claimed = yield* delivery.claim({
+            outboxMessageId: fixture.outboxMessageId,
+            policy,
+          });
+          if (claimed._tag !== "Claimed") {
+            return { _tag: "Unexpected", attemptNumber } as const;
+          }
+          yield* delivery.completeAttempt({
+            attemptId: claimed.attemptId,
+            outboundMessageId: claimed.outboundMessageId,
+            outcome: { _tag: "TerminalFailure", errorCode: "telegram_http_400" },
+          });
+          if (attemptNumber < 3) {
+            const recovered = yield* recovery.prepare(
+              recoveryInput(`github-run-9007-${attemptNumber}`, fixture.outboundMessageId),
+            );
+            if (recovered._tag !== "Prepared") {
+              return recovered;
+            }
+          }
+        }
+
+        return yield* recovery.prepare(
+          recoveryInput("github-run-9007-3", fixture.outboundMessageId),
+        );
+      }).pipe(Effect.provide(deliveryAndRecoveryLayer), Effect.scoped),
+    );
+
+    expect(finalRecovery).toEqual({
+      _tag: "NotRecoverable",
+      reason: "attempt_limit_reached",
+    });
+  });
+
+  it("distinguishes a missing recovery record from persistence unavailability", async () => {
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const recovery = yield* TelegramDeliveryRecoveryStore;
+        return yield* recovery.markPublished({
+          recoveryId: Schema.decodeUnknownSync(TelegramDeliveryRecoveryId)(
+            "github-run-missing-recovery",
+          ),
+        });
+      }).pipe(Effect.provide(recoveryLayer), Effect.scoped),
+    );
+
+    expect(result).toEqual({ _tag: "NotFound" });
   });
 });

@@ -11,6 +11,7 @@
     "./channel/inbound-event": "./src/channel/inbound-event.ts",
     "./channel/outbound-channel-intent": "./src/channel/outbound-channel-intent.ts",
     "./channel/process-telegram-event": "./src/channel/process-telegram-event.ts",
+    "./channel/recover-telegram-delivery": "./src/channel/recover-telegram-delivery.ts",
     "./channel/telegram-event": "./src/channel/telegram-event.ts",
     "./identity/actor-context": "./src/identity/actor-context.ts",
     "./identity/channel-identity": "./src/identity/channel-identity.ts",

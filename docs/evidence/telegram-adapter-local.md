@@ -39,8 +39,7 @@ npm run test:integration
 
 ## Remaining provider-backed work
 
-- Apply migration `0009_telegram_processing` to the managed development and staging databases.
-- Configure `TELEGRAM_WEBHOOK_SECRET` and `TELEGRAM_BOT_TOKEN` as secrets in each intended Worker environment. Keep the public `TELEGRAM_BOT_USERNAME` in environment-specific Wrangler `vars`; staging uses `xpensego_staging_bot`, and development deep links remain disabled until a separate bot exists.
-- Register the staging webhook with Telegram and capture real secret-verification, delivery-acceptance, explicit rejection, and Queue-recovery evidence.
-- Define an operator-authorized recovery procedure for terminal provider records. Automatic resend remains prohibited when prior acceptance is uncertain.
+- The staging Worker secrets, public bot username, webhook registration, authenticated duplicate ingress, and explicit Bot API rejection are now evidenced in the [Telegram staging report](./telegram-staging.md).
+- Apply migration `0010_telegram_delivery_recovery`, provision the staging Queue-write token, and execute the audited terminal-recovery workflow once.
+- Capture a real Bot API acceptance from a valid private staging chat. Automatic resend remains prohibited when prior acceptance is uncertain.
 - Implement transaction parsing and ledger mutation. The current adapter deliberately does not imply that an accepted text message created an expense.

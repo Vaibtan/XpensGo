@@ -40,6 +40,7 @@ describe("PostgreSQL migrations", () => {
         [7, "identity_foundation"],
         [8, "telegram_ingress"],
         [9, "telegram_processing"],
+        [10, "telegram_delivery_recovery"],
       ]);
       expect(secondRun).toEqual([]);
     });
@@ -68,9 +69,12 @@ describe("PostgreSQL migrations", () => {
             readonly canUpdateChannelUnlink: boolean;
             readonly canUpdateOutboxReceiptAttempts: boolean;
             readonly canInsertMigrations: boolean;
+            readonly canInsertTelegramDeliveryRecoveries: boolean;
             readonly canUpdateOutboxPayload: boolean;
             readonly canUpdateOutboxStatus: boolean;
+            readonly canUpdateTelegramDeliveryRecoveries: boolean;
             readonly canUpdateUserTimezone: boolean;
+            readonly canSelectTelegramDeliveryRecoveries: boolean;
             readonly roleName: string;
           }>`
             SELECT
@@ -112,7 +116,13 @@ describe("PostgreSQL migrations", () => {
                 'UPDATE'
               ) AS "canUpdateOutboxReceiptAttempts",
               has_table_privilege(current_user, 'xpensego_migrations', 'INSERT')
-                AS "canInsertMigrations"
+                AS "canInsertMigrations",
+              has_table_privilege(current_user, 'telegram_delivery_recoveries', 'SELECT')
+                AS "canSelectTelegramDeliveryRecoveries",
+              has_table_privilege(current_user, 'telegram_delivery_recoveries', 'INSERT')
+                AS "canInsertTelegramDeliveryRecoveries",
+              has_table_privilege(current_user, 'telegram_delivery_recoveries', 'UPDATE')
+                AS "canUpdateTelegramDeliveryRecoveries"
           `;
         }).pipe(Effect.provide(runtimeClientLayer), Effect.scoped),
       );
@@ -133,9 +143,12 @@ describe("PostgreSQL migrations", () => {
         canUpdateChannelUnlink: true,
         canUpdateOutboxReceiptAttempts: true,
         canInsertMigrations: false,
+        canInsertTelegramDeliveryRecoveries: false,
         canUpdateOutboxPayload: false,
         canUpdateOutboxStatus: true,
+        canUpdateTelegramDeliveryRecoveries: false,
         canUpdateUserTimezone: true,
+        canSelectTelegramDeliveryRecoveries: false,
       });
     });
   });

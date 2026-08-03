@@ -11,6 +11,7 @@ import { outboxConsumptionObservabilityMigration } from "./migrations/0006-outbo
 import { identityFoundationMigration } from "./migrations/0007-identity-foundation.js";
 import { telegramIngressMigration } from "./migrations/0008-telegram-ingress.js";
 import { telegramProcessingMigration } from "./migrations/0009-telegram-processing.js";
+import { telegramDeliveryRecoveryMigration } from "./migrations/0010-telegram-delivery-recovery.js";
 
 const migrationProgram = Migrator.make({})({
   loader: Migrator.fromRecord({
@@ -23,6 +24,7 @@ const migrationProgram = Migrator.make({})({
     "0007_identity_foundation": identityFoundationMigration,
     "0008_telegram_ingress": telegramIngressMigration,
     "0009_telegram_processing": telegramProcessingMigration,
+    "0010_telegram_delivery_recovery": telegramDeliveryRecoveryMigration,
   }),
   table: "xpensego_migrations",
 });

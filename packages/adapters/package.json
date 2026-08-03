@@ -6,11 +6,13 @@
   "exports": {
     "./auth/better-auth": "./src/auth/better-auth.ts",
     "./cloudflare/console-runtime-telemetry": "./src/cloudflare/console-runtime-telemetry.ts",
+    "./cloudflare/queue-api-publication": "./src/cloudflare/queue-api-publication.ts",
     "./cloudflare/runtime-config": "./src/cloudflare/runtime-config.ts",
     "./postgres/inbound-event-store": "./src/postgres/inbound-event-store.ts",
     "./postgres/identity-store": "./src/postgres/identity-store.ts",
     "./postgres/isolated-test-database": "./src/postgres/isolated-test-database.ts",
     "./postgres/migrations": "./src/postgres/migrations.ts",
+    "./postgres/migration-database-url": "./src/postgres/migration-database-url.ts",
     "./postgres/outbox-store": "./src/postgres/outbox-store.ts",
     "./postgres/telegram-ingress-store": "./src/postgres/telegram-ingress-store.ts",
     "./postgres/telegram-queue-runtime": "./src/postgres/telegram-queue-runtime.ts",
@@ -18,6 +20,7 @@
     "./telegram/deep-link": "./src/telegram/deep-link.ts",
     "./postgres/telegram-event-processing-store": "./src/postgres/telegram-event-processing-store.ts",
     "./postgres/telegram-delivery-store": "./src/postgres/telegram-delivery-store.ts",
+    "./postgres/telegram-delivery-recovery-store": "./src/postgres/telegram-delivery-recovery-store.ts",
     "./web-crypto/link-challenge-crypto": "./src/web-crypto/link-challenge-crypto.ts"
   },
   "scripts": {
@@ -30,6 +33,7 @@
   },
   "dependencies": {
     "@effect/experimental": "0.61.1",
+    "@effect/platform": "0.97.1",
     "@effect/sql": "0.52.1",
     "@effect/sql-pg": "0.53.0",
     "@xpensego/contracts": "0.1.0",

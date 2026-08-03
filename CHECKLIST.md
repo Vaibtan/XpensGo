@@ -109,7 +109,7 @@ Decision ownership is role-based until named operators are added to the project:
 - [x] Suppress blind duplicate sends after an ambiguous Telegram provider outcome or an expired provider-attempt lease.
 - [ ] Capture real provider acceptance/rejection evidence and add an explicit operator recovery policy for terminal delivery records.
 
-**Telegram adapter evidence (local):** [Telegram webhook, processing, and reply adapter](./docs/evidence/telegram-adapter-local.md). Staging registration and real Bot API delivery remain provider-backed acceptance work.
+**Telegram adapter evidence:** [local webhook, processing, and reply adapter](./docs/evidence/telegram-adapter-local.md) · [staging webhook, duplicate, rejection, and recovery evidence](./docs/evidence/telegram-staging.md). Real Bot API acceptance and live recovery execution remain open.
 
 ### Manual capture and ledger control
 

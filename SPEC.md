@@ -348,6 +348,8 @@ The first implementation must:
 
 Cloudflare Queues are treated as at-least-once delivery. Duplicate consumption must converge on one terminal domain state. Exactly-once external delivery is not claimed: when a provider may have accepted a call but its response was lost, the attempt becomes `outcome_unknown` and follows a purpose-specific reconciliation policy rather than an automatic retry.
 
+Operator recovery does not weaken that rule. Telegram `provider_accepted` and `outcome_unknown` records are never replayable. An explicit `terminal_failure` may be returned to the existing delivery path only through a separately privileged, audited operation that matches the current safe error code, records an allow-listed correction reason and idempotency key, and remains below the normal provider-attempt ceiling. The recovery transaction uses the direct administrative database authority outside Worker runtime credentials; Queue publication uses a token limited to Queue writes. Repeated or uncertain recovery publication may produce duplicate Queue jobs, but the persisted provider-attempt claim must still converge on at most one Bot API call.
+
 ### WhatsApp adapter
 
 No WhatsApp implementation is part of the core build. The later adapter must additionally handle Meta webhook verification and signatures, customer-service windows, approved templates, consent, media retrieval, delivery/read status events, quality controls, and message cost.

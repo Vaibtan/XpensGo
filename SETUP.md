@@ -72,4 +72,17 @@ npx wrangler secret put TELEGRAM_WEBHOOK_SECRET --env staging --config apps/api/
 npx wrangler secret put TELEGRAM_BOT_TOKEN --env staging --config apps/api/wrangler.jsonc
 ```
 
-Omit `--env staging` only when intentionally configuring the separate development Worker. Secret creation alone does not register the webhook. Registration and real provider acceptance are tracked separately so local implementation evidence cannot be mistaken for a deployed Telegram proof.
+Omit `--env staging` only when intentionally configuring the separate development Worker. The staging webhook is registered at `https://xpensego-api-staging.vaibhav21296.workers.dev/v1/channels/telegram/webhook`; provider observations and remaining acceptance work are recorded in the [Telegram staging report](./docs/evidence/telegram-staging.md).
+
+## Telegram terminal delivery recovery
+
+The `Recover Telegram delivery` GitHub Actions workflow is the only managed recovery path for an explicitly rejected Telegram reply. It uses the existing `XPENSEGO_MIGRATION_DATABASE_URL_STAGING` secret and additionally requires `XPENSEGO_CLOUDFLARE_QUEUE_API_TOKEN_STAGING`, a Cloudflare API token scoped to this account with only **Queues Write** permission. Do not use a global API key or reuse the bot/webhook credentials.
+
+Before running the workflow:
+
+1. Apply all managed staging migrations, including `0010_telegram_delivery_recovery`.
+2. Correct and review the cause of the explicit provider rejection.
+3. Read the terminal outbound message UUID and safe `last_error_code` from the staging delivery record.
+4. Dispatch `Recover Telegram delivery` with that UUID, the exact error code, an allow-listed reason, and confirmation `recover`.
+
+The workflow derives an idempotency key from its GitHub run. Re-running the same workflow run is safe. Starting a new run authorizes another provider call only while the message is still `terminal_failure` and below the normal three-attempt ceiling. `provider_accepted`, `outcome_unknown`, mismatched errors, and exhausted records are always refused. Recovery uses the direct administrative database URL and Cloudflare Queue API outside the Worker; the runtime database role has no access to recovery records.

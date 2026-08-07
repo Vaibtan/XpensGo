@@ -113,7 +113,8 @@ Decision ownership is role-based until named operators are added to the project:
 
 ### Manual capture and ledger control
 
-- [ ] Select a Workers-compatible model provider and routing policy before provider-backed parsing; keep the deterministic Model Gateway adapter usable in tests and local development.
+- [x] Select the OpenAI-only initial model provider, pinned nano routing, Effect Schema boundary, operation-specific retry policy, and budget/kill-switch controls; preserve the deterministic Model Gateway adapter for tests and normal local development.
+- [ ] Complete the [model-gateway Workerd, durable-attempt, failure, cost, and synthetic-corpus proof](https://github.com/Vaibtan/XpensGo/issues/19) before provider-backed parsing; remove AI SDK if its conditional adapter gate fails and never retain a fallback implementation.
 - [ ] Implement debit and credit creation from both a web form and ordinary-language Telegram messages.
 - [ ] Support one or multiple transactions, one focused missing-amount clarification, English and Hinglish fixtures, and relative dates resolved in the user's timezone.
 - [ ] Store each monetary value as a positive integer minor-unit `BIGINT` with an ISO 4217 currency and explicit `debit | credit` direction; prohibit floating-point and signed-amount representations.
@@ -123,6 +124,8 @@ Decision ownership is role-based until named operators are added to the project:
 - [ ] Use stable cursor pagination for mutable ledger lists and exclude soft-deleted transactions from normal reads.
 - [ ] Record activation, request outcome, model usage, and cost without copying financial contents into analytics.
 - [ ] Test malformed input, webhook and Queue duplicates, outbox recovery, concurrent creation, ambiguous send outcomes, corrections, deletion/undo, stable pagination, and cross-user access.
+
+**Model Gateway decision:** [ADR 0005](./docs/adr/0005-effect-openai-model-gateway.md) · [product-owner approvals](https://github.com/Vaibtan/XpensGo/issues/13) · [research rationale and dated evidence](./docs/research/model-gateway-provider-routing.md).
 
 **Exit gate:** web signup → Telegram link → ordinary-language transaction → durable Telegram reply → web ledger passes in staging; web manual creation, correction, soft delete, and undo also pass, including duplicate delivery and two-user isolation tests.
 

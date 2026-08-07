@@ -510,21 +510,43 @@ Models may assist with:
 
 ### Model gateway seam
 
-The model gateway Effect service accepts a stable operation identifier, versioned operation, and output schema, and returns structured output plus usage metadata or a typed outcome. It hides provider request formats from domain modules.
+The model gateway Effect service accepts a stable operation identifier, versioned operation, canonical input digest, and Effect output Schema. It returns a decoded suggestion plus usage metadata or a typed non-success while hiding provider request formats from domain modules. [ADR 0005](./docs/adr/0005-effect-openai-model-gateway.md) owns the provider and architectural decision.
 
-The Vercel AI SDK may be selected later as an implementation detail inside a provider adapter after the Phase 2 model decision. It is not installed as a fallback, does not define domain or application interfaces, and cannot bypass the Model Gateway's Effect service, schema, cost, retry, or persistence policies.
+OpenAI is the sole initial provider. `gpt-5.4-nano-2026-03-17` is the only enabled model and is selected statically by the operation registry:
 
-Requirements:
+| Operation                     | Scope                                           | Maximum input/output tokens | Automatic dispatch and deadline ceiling                                                                                      |
+| ----------------------------- | ----------------------------------------------- | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `transaction.extract.v1`      | One Source Record                               | 1,500 / 256                 | At most two HTTP dispatches only after a classified transient 429; one potentially billable attempt; 3s provider / 4s total. |
+| `transaction.extract_many.v1` | At most five pasted Source Records              | 7,500 / 1,280               | Same attempt ceiling; 7s provider / 10s total.                                                                               |
+| `query.slots.v1`              | Intent and slots from an authenticated question | 1,200 / 192                 | Same attempt ceiling; 4s provider / 6s total.                                                                                |
 
-- strict structured outputs for mutations and query slots;
-- bounded retries and iterations only when the provider call is known not to have succeeded or supports a stable idempotency key;
-- explicit timeout, terminal, transient, and `outcome_unknown` modes;
-- persistence of a successful structured result so duplicate consumption does not purchase the same operation again;
-- prompt, schema, parser, and model versions recorded;
-- input/output token and monetary cost recorded;
-- test adapter with deterministic fixtures;
-- provider retention, training, deletion, and data-location behavior reviewed before real financial contents are sent;
-- no secrets or financial contents in telemetry.
+Query-slot work receives authenticated scope and the user's bounded question, never ledger rows, and cannot generate or execute SQL. Mini-backed import extraction and free-form answer generation remain disabled until their separate evaluation and approval gates pass. Provider failures never trigger cross-provider or cross-model fallback.
+
+The provider adapter may use only `ai@7.0.48` core and `@ai-sdk/openai@4.0.27` if the Workerd, bundle, dependency, and contract proof in [issue #19](https://github.com/Vaibtan/XpensGo/issues/19) passes. The SDK remains inside `packages/adapters`; SDK types, AI SDK routing, Vercel AI Gateway, UI packages, agent abstractions, and parallel providers do not enter application contracts. If the proof fails, both packages are removed before merge and the same port is implemented with the existing Effect HTTP client; both paths are never retained as fallbacks.
+
+Effect Schema is the sole application contract authority. Each operation generates provider-compatible JSON Schema from its Effect Schema, rejects unsupported schema features before dispatch, and decodes the returned unknown value again through the original Effect Schema before deterministic application/domain validation or persistence. No handwritten Zod application contract is maintained.
+
+The operation, provider attempt, completion disposition, observed failure, and retry plan remain separate:
+
+- an attempt advances through guarded `prepared → dispatched(lease) → completed(disposition)` transitions; its identity and completed disposition are immutable;
+- completion disposition is `succeeded`, `explicitly_rejected`, `invalid_output`, or `outcome_unknown`;
+- observed failures use distinct Effect tagged errors, including schema unsupported, rate limited, quota denied, local deadline exceeded, connection lost, attempt lease expired, empty response, malformed response, provider 5xx, request rejected, provider refusal, truncation, and structured-output decoding failure;
+- deterministic financial/domain rejection is a separate application outcome rather than a provider-adapter error; and
+- retry plan is `none` or a persisted scheduled transient-429 retry and is never inferred from an SDK error flag.
+
+Before the first dispatch, PostgreSQL persists the operation/retry-policy versions, canonical input digest, actor scope, deadline, HTTP-dispatch and potentially-billable ceilings, transient-429 grant limit, explicit-restart limit, and maximum cost reservation. Every HTTP dispatch has a unique attempt ordinal. Reuse of an operation identifier with a different digest is a conflict; duplicate Queue delivery or concurrent claims return or converge on durable state without purchasing another unauthorized call.
+
+AI SDK uses `maxRetries: 0`, and provider dispatch is not wrapped in `Effect.retry`. The durable Model Operation service and store are the sole retry authority; Queue delivery attempts are transport wake-ups and cannot reset deadlines, reservations, provider counts, or grants. A request may tighten its registered operation profile for size, remaining deadline, cancellation, prior attempts, available budget, or provider delay but cannot raise it.
+
+Only a parsed transient 429 known to have rejected the call may receive the registered automatic redispatch, and only when its valid `Retry-After` is at most one second and fits the persisted deadline and reservation. Quota, billing, spend-limit, and action-required 429s do not retry. Timeout, connection loss, empty or malformed response, post-dispatch 5xx, and completion missing after attempt-lease expiry remain separately observable and complete as `outcome_unknown` without automatic redispatch. Lease expiry proves missing completion, not a Worker crash. An explicit restart creates one new operation and reservation linked to the immutable root and consumes the lineage-wide single restart grant; it cannot change the original unknown attempt.
+
+Local development uses the deterministic adapter unless a developer explicitly runs a provider evaluation. Development and staging share a $1 monthly provider ceiling. The controlled alpha has a $5 monthly ceiling across settled cost plus maximum reservations for in-flight and `outcome_unknown` attempts, an initial $0.25 per-user calendar-month allowance, and a 20-provider-dispatch per-user daily abuse ceiling. Every dispatch, including rejected or failed calls, consumes the daily ceiling.
+
+Maximum cost is reserved atomically before dispatch, rejected if any allowance would be exceeded, settled to reported usage on success, and retained in full for `outcome_unknown`. The PostgreSQL reservation ledger and application kill switch are synchronous authorities; provider-side budget alerts are defense in depth. Alert at 50%; disable mini and nonessential evaluation at 80%; notify the product/technical owner at 90%; and reject every new model dispatch at 100%.
+
+The global model kill switch engages immediately on credential compromise, cross-user content exposure, telemetry content leakage, provider-policy/privacy breach, unbounded retry or cost behavior, or atomic reservation failure. Provider/model selection is reopened for snapshot deprecation or material availability change, price movement of at least 20%, monthly cost above $0.25 per activated alpha user or $5 aggregate, a failed critical-field/privacy/Workerd/latency gate, unknown outcomes above 1% or two in one rolling hour, mini demand above 10% of ordinary operations, material provider-policy changes, or a measured migration benefit.
+
+The deterministic test Layer implements the same port and independently fixtures observed tagged results/errors, completion dispositions, and retry plans. Successful structured results, prompt/schema/parser/model versions, usage, opaque request identifiers, and cost are persisted. Secrets, Source Records, questions, outputs, raw provider bodies/headers, Telegram identifiers, email, and financial contents never enter telemetry or Queue payloads. Provider retention, training, deletion, data location, and subprocessors must pass the separate invite-readiness privacy gate before real financial contents are sent.
 
 ### Evaluation corpus
 
@@ -613,7 +635,7 @@ Every asynchronous operation defines:
 - observable progress and terminal state;
 - dead-letter or operator recovery path.
 
-Effect retry, timeout, and concurrency policies operate inside one Queue or Workflow attempt. Platform retry policy owns re-execution after that attempt terminates. Both layers use the same typed failure classification and bounded total-attempt policy so retries cannot multiply without limit.
+Effect retry, timeout, and concurrency policies may operate inside one Queue or Workflow attempt only when the purpose-specific policy permits them. Platform retry owns transport redelivery or workflow re-entry, not permission to repeat an external call. Every entry reclaims permission from the persisted operation and attempt budget so Effect, adapter, Queue, and Workflow loops cannot multiply provider calls.
 
 Database-to-Queue delivery uses a transactional outbox or an equivalently recoverable design. A dispatcher marks publication separately from processing, and consumers remain idempotent even when publication or delivery repeats. Publication is not completion: a reconciler scans durable domain requests that were published but remain non-terminal beyond their expected time, then safely re-enqueues, suppresses, or escalates them. Tests cover loss after publication, dead-lettering, retention expiry, and a stalled consumer.
 

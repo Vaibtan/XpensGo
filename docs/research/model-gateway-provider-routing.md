@@ -2,7 +2,7 @@
 
 **Issue:** [#12](https://github.com/Vaibtan/XpensGo/issues/12)
 **Researched:** 2026-08-03
-**Status:** recommendation ready for product-owner approval in [#13](https://github.com/Vaibtan/XpensGo/issues/13); no provider package, credential, or production route was changed by this research
+**Status:** policy accepted in [#13](https://github.com/Vaibtan/XpensGo/issues/13), recorded by [ADR 0005](../adr/0005-effect-openai-model-gateway.md), and queued for proof in [#19](https://github.com/Vaibtan/XpensGo/issues/19); no provider package, credential, or production route has been changed
 
 ## Decision summary
 
@@ -12,7 +12,7 @@ Adopt an application-owned **Effect Model Gateway** and, subject to the implemen
 2. **`gpt-5.4-nano-2026-03-17` is the only initially enabled model.** It handles single- or small-multiple transaction extraction, natural-language intent classification, and query-slot filling. OpenAI describes GPT-5.4 nano as intended for classification and data extraction; the snapshot supports Structured Outputs and currently costs $0.20 per million input tokens and $1.25 per million output tokens. [OpenAI GPT-5.4 nano](https://developers.openai.com/api/docs/models/gpt-5.4-nano)
 3. **`gpt-5.4-mini-2026-03-17` is an approval-gated second model, not a runtime fallback.** It may be enabled only for bounded, deterministically classified complex import chunks after the evaluation corpus proves a material quality gain. It currently costs $0.75 per million input tokens and $4.50 per million output tokens and supports Structured Outputs. [OpenAI GPT-5.4 mini](https://developers.openai.com/api/docs/models/gpt-5.4-mini)
 4. **Effect Schema remains the sole application contract authority.** Generate a provider-safe JSON Schema from the Effect Schema, give that generated schema to AI SDK `Output.object`, and decode the returned value again through the original Effect Schema before persistence. There are no handwritten Zod contracts.
-5. **Disable SDK retries (`maxRetries: 0`) and own reliability in Effect.** An explicit rate-limit rejection may receive one delayed retry; a timeout, lost connection, indeterminate response, or server failure after dispatch becomes `outcome_unknown` and is never automatically repurchased.
+5. **Disable SDK retries (`maxRetries: 0`) and own reliability in the durable application operation.** The operation registry supplies a persisted, request-tightened retry policy. Only an explicit transient rate-limit rejection may be eligible, and the number and delay depend on the operation; a timeout, lost connection, indeterminate response, or server failure after dispatch is never automatically repurchased.
 6. **Development is deterministic by default.** Provider-backed staging/evaluation has a $1 monthly ceiling. The controlled 10–15-user alpha has an atomic $5 monthly application ceiling, with the global model kill switch engaged before another reservation can exceed it. These are product limits, not estimates of a provider's billing guarantee.
 7. **Do not send real financial contents yet.** OpenAI says API data is not used for training unless the customer opts in, but default abuse-monitoring logs may contain prompts and responses and are retained for up to 30 days. Real data remains blocked until the invite-readiness privacy notice, consent, retention decision, processor terms, deletion handling, and access controls are approved. Set `store: false`; that avoids optional Responses API application state but does not remove default abuse-monitoring retention. [OpenAI data controls](https://developers.openai.com/api/docs/guides/your-data)
 
@@ -22,9 +22,9 @@ This recommendation selects one provider because Xpensego needs provider-backed 
 
 - **Documented fact** means a linked first-party source makes the claim.
 - **Inference** means the sources support the inputs, but Xpensego still needs a Workerd or provider-backed proof.
-- **Recommendation** is the policy proposed for approval in issue #13.
+- **Recommendation** identifies the selected policy or a future reconsideration trigger; implementation claims still require the stated proof gates.
 
-This research note is non-authoritative decision input. Until issue #13 accepts a choice, every architecture, policy, limit, and gate below is proposed. Approval must record durable invariants in an ADR and the Specification, resolve the Checklist's open model-decision row, and create a separate implementation-spike ticket for measurable runtime/evaluation evidence. After that synchronization, this note remains rationale and point-in-time evidence rather than a competing specification or delivery plan.
+This research note is non-authoritative rationale and point-in-time evidence. Issue #13 approved the provider/adapter, initial routing, structured-output authority, reliability policy, and budget/kill-switch/reconsideration controls. [ADR 0005](../adr/0005-effect-openai-model-gateway.md) records why; the Specification owns enforceable behavior; the Checklist and [issue #19](https://github.com/Vaibtan/XpensGo/issues/19) own delivery and proof. Real financial data remains independently blocked by the invite-readiness privacy gate.
 
 ## Required architecture
 
@@ -51,7 +51,7 @@ The model never receives or chooses a `UserId`, `LedgerId`, SQL statement, datab
 
 ## Provider comparison
 
-All four options have a credible Cloudflare Workers invocation path. Workers can make outbound HTTPS requests with the standard Fetch API, while Workers AI additionally exposes a native binding. This establishes a plausible runtime path, not proof that the selected package graph bundles under Xpensego's exact Wrangler configuration; the post-approval implementation ticket must keep the deployed Workerd spike as a gate. [Cloudflare Workers Fetch API](https://developers.cloudflare.com/workers/runtime-apis/fetch/), [Workers AI overview](https://developers.cloudflare.com/workers-ai/)
+All four options have a credible Cloudflare Workers invocation path. Workers can make outbound HTTPS requests with the standard Fetch API, while Workers AI additionally exposes a native binding. This establishes a plausible runtime path, not proof that the selected package graph bundles under Xpensego's exact Wrangler configuration; issue #19 keeps the deployed Workerd spike as a gate. [Cloudflare Workers Fetch API](https://developers.cloudflare.com/workers/runtime-apis/fetch/), [Workers AI overview](https://developers.cloudflare.com/workers-ai/)
 
 Prices below are point-in-time evidence from 2026-08-03 and must not be copied into the Specification as durable architecture.
 
@@ -70,7 +70,7 @@ The decision is not that OpenAI is universally better. It is the smallest curren
 
 Routing is static application policy keyed by a versioned operation. The caller cannot submit a provider or model name, and a provider error never causes silent cross-provider or cross-model fallback.
 
-Each enabled operation permits one potentially billable attempt. It may make at most two HTTP dispatches only when the first receives an explicit, known-rejected 429 and the single delayed retry remains within the same operation reservation; every ambiguous response ends the operation without another dispatch.
+Each enabled operation receives a versioned retry ceiling from the registry. The request may tighten that ceiling for its remaining deadline, budget, cancellation state, size, prior attempts, and provider `Retry-After`, but it can never raise it. Only an explicit, known-rejected 429 is eligible for automatic redispatch; every ambiguous response ends that attempt without another automatic purchase. The approved initial operation-specific bounds are defined in the reliability section and remain subject to staging measurement.
 
 | Operation                                             | Deterministic work before and after the model                                                                                                                                                                  | Initial route and hard limits                                                                                                            | Escalation policy                                                                                                                                                          |
 | ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -126,9 +126,9 @@ ai@7.0.48
 
 Do not add `@ai-sdk/react`, an AI SDK agent package/abstraction, `@ai-sdk/gateway` directly, `ai-gateway-provider`, `openai`, another `@ai-sdk/*` provider, or a Cloudflare Workers AI provider. Do not use AI SDK telemetry callbacks to export prompts or results.
 
-The post-approval implementation ticket must reject and remove the SDK before merge, then implement the same OpenAI call with the existing Effect HTTP client, if the deployed bundle proof shows unsupported Node behavior, meaningful cold-start/size regression, unavoidable gateway initialization, Zod-based contract pressure, or a dependency-audit failure. That is a pre-release adapter choice, not a second installed fallback.
+Issue #19 must reject and remove the SDK before merge, then implement the same OpenAI call with the existing Effect HTTP client, if the deployed bundle proof shows unsupported Node behavior, meaningful cold-start/size regression, unavoidable gateway initialization, Zod-based contract pressure, or a dependency-audit failure. That is a pre-release adapter choice, not a second installed fallback.
 
-## Reliability, idempotency and `outcome_unknown`
+## Reliability, idempotency and typed failure identity
 
 The provider call has no domain side effect, but it can create an unrecoverable billed result. Duplicate calls therefore violate both cost and consistency requirements.
 
@@ -136,29 +136,88 @@ The provider call has no domain side effect, but it can create an unrecoverable 
 
 Before dispatch, atomically insert or claim a record keyed by the server-issued source/request `operation_id` plus `operation_version`, scoped to the authenticated actor, and reserve its maximum cost. Persist the canonical input digest as an integrity value. Reusing an operation identifier with a different digest is an idempotency conflict; identical content under distinct source/request identifiers remains two legitimate operations. Replays return the persisted success or current terminal/unknown state; they do not call the provider again.
 
-Recommended states:
+Keep four concepts orthogonal rather than encoding them in one status or error. Lifecycle and completion disposition apply to one provider-attempt identity; its row advances only through guarded compare-and-set transitions, and its identity and completed disposition are immutable. An allowed retry opens the next attempt ordinal under the same operation:
 
-- `prepared`: idempotency record and worst-case budget reservation committed;
-- `dispatched`: the HTTP call may have left the Worker;
-- `succeeded`: structured result, usage and provider request identifier persisted;
-- `explicitly_rejected`: non-retryable provider response, refusal, or invalid request;
-- `rate_limited`: explicit rejection eligible for one delayed retry while the lease is valid;
-- `invalid_output`: provider returned a result, but Effect validation or finish-reason policy rejected it;
-- `outcome_unknown`: dispatch may have been processed, but no trustworthy result/usage was obtained.
+- **Lifecycle:** `prepared | dispatched(lease) | completed(disposition)`.
+- **Completion disposition:** `succeeded | explicitly_rejected(reason) | invalid_output(reason) | outcome_unknown(failure_tag)`.
+- **Retry plan:** `none | schedule_rate_limit_retry(attempt_ordinal, not_before)`. Rate limiting is an explicit rejection reason plus a retry plan, not a lifecycle state.
+- **Observed failure:** one application-owned tagged error carrying only safe evidence. An exhaustive pure classifier maps the error to a completion disposition and retry plan; the error itself does not contain `isRetryable` or choose policy.
 
-### Classification policy
+Persist a distinct `failure_tag`, `dispatch_certainty`, and attempt record so several failures can share `outcome_unknown` without becoming observationally identical. Use these dispatch-certainty values:
 
-- Validation/configuration/authentication failures before dispatch are terminal and spend no reserved budget.
-- An explicit HTTP 429 is known rejected and may be retried once after the provider delay, within the same operation budget.
-- HTTP 400/401/403/404, refusal, content filtering, schema rejection, and output truncation are typed terminal outcomes. Truncation does not automatically buy a larger result; adjust the operation version after evaluation.
-- Timeout, abort after dispatch, connection loss, malformed/missing response, Worker termination, and HTTP 5xx are `outcome_unknown`. Do not automatically retry them.
-- A user/operator may explicitly start one new priced attempt from `outcome_unknown`; it receives a new attempt identifier while preserving the original record and cost reservation. No ledger mutation is created from the unknown attempt.
+- `not_dispatched`: the durable `dispatched` transition was never committed;
+- `possibly_dispatched`: the transition was committed, but the transport cannot prove whether the provider accepted or processed the request;
+- `provider_reached`: an HTTP response proves the provider received the request, but does not by itself prove whether work was billed or a usable result existed; and
+- `result_received`: a response and body were obtained and can be classified or validated.
 
-Set `X-Client-Request-Id` to the opaque attempt identifier and persist OpenAI's returned `x-request-id` when present. OpenAI documents request identifiers for troubleshooting, not as a result-retrieval or idempotency contract, so they do not make unknown attempts safe to retry. [OpenAI error and request diagnostics](https://developers.openai.com/api/docs/guides/error-codes)
+### One retry authority, separate delivery retries
 
-AI SDK exposes status, headers, response body and an `isRetryable` hint through `APICallError`; map these immediately to application-owned tagged errors and discard/redact bodies before logging. The SDK's hint does not override the stricter Xpensego ambiguity policy. [AI SDK `APICallError`](https://ai-sdk.dev/docs/reference/ai-sdk-errors/ai-api-call-error)
+Set AI SDK `maxRetries: 0` on every call. The pinned AI SDK v7 source defaults `maxRetries` to two, while its provider error type treats 408, 409, 429, and 5xx responses as retryable by default and its fetch wrapper marks connection failures retryable. Those are useful transport hints, not Xpensego policy. [AI SDK v7 retry preparation](https://github.com/vercel/ai/blob/ai%407.0.48/packages/ai/src/util/prepare-retries.ts), [AI SDK v7 `APICallError`](https://github.com/vercel/ai/blob/ai%407.0.48/packages/provider/src/errors/api-call-error.ts), [AI SDK v7 fetch-error mapping](https://github.com/vercel/ai/blob/ai%407.0.48/packages/provider-utils/src/handle-fetch-error.ts)
+
+The application-owned Model Operation service, backed by its durable store, is the sole authority allowed to purchase another provider attempt. Effect models timeouts and tagged expected errors, but there is no `Effect.retry` or SDK retry around provider dispatch. The service atomically classifies the completed attempt and persists any allowed retry grant before a Queue delay wakes the operation again. No error object or SDK `isRetryable` flag grants a retry. [Effect expected errors](https://effect.website/docs/error-management/expected-errors/)
+
+Cloudflare Queue delivery is a different loop: it delivers each message at least once and may redeliver even when the consumer succeeds. A delivery must atomically claim durable permission before dispatch; active leases, completed attempts, unknown outcomes, duplicate messages, and exhausted budgets acknowledge without calling the provider. `message.attempts`, `message.retry()`/`ack()`, and `max_retries` govern transport delivery only. Xpensego's current Queue ceiling is three configured retries plus DLQ, so tests must observe at most four deliveries including the initial one without allowing those deliveries to reset provider counts, cost, or deadlines. [Cloudflare Queue delivery guarantees](https://developers.cloudflare.com/queues/reference/delivery-guarantees/), [Cloudflare Queue batching and retries](https://developers.cloudflare.com/queues/configuration/batching-retries/)
+
+Persist every HTTP dispatch under unique `(operation_id, attempt_ordinal)` and enforce `provider_dispatch_count <= 1 + explicit_rate_limit_retry_grants`, with at most the registry-approved number of grants. An explicit restart from an unknown outcome creates a new `operation_id` linked to the immutable root operation, requires a new reservation, and consumes the lineage's registry-approved `explicit_restart_limit`; the initial policy allows at most one, so the lineage can contain at most two potentially billable operations. If completion persistence fails after dispatch, redelivery observes the live lease and does not call again; lease-expiry recovery later records the unknown outcome. Keep the attempt lease longer than the provider timeout plus the persistence-finalization margin.
+
+### Approved initial operation/request-specific retry bounds
+
+The product owner approved these initial reliability ceilings in issue #13 on 2026-08-06. They are implementation bounds and pre-measurement deadline targets, not validated production SLOs. Every operation persists `retry_policy_version`, `http_dispatch_limit`, `potentially_billable_limit`, `rate_limit_retry_limit`, provider timeout, `deadline_at`, `reserved_cost_limit`, allowed retry tags, and `explicit_restart_limit` before the first dispatch. A request may reduce those bounds for cancellation, size, remaining time, prior attempts, available budget, or provider delay; it cannot raise them.
+
+| Operation                            | HTTP/provider ceiling                                                                                     | Provider / end-to-end automatic deadline | Maximum reservation | Terminal user action                                                                                                  |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------- | ---------------------------------------- | ------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `transaction.extract.v1`             | At most 2 dispatches only when dispatch 1 is a transient 429; at most 1 potentially billable attempt.     | 3 seconds / 4 seconds from publication   | $0.000620           | One explicit new linked priced operation after `outcome_unknown`; otherwise clarify/review without a ledger mutation. |
+| `transaction.extract_many.v1`        | At most 2 dispatches only when dispatch 1 is a transient 429; at most 1 potentially billable attempt.     | 7 seconds / 10 seconds                   | $0.003100           | One explicit new linked priced operation; preserve per-record validation and never silently replay the whole batch.   |
+| `query.slots.v1`                     | At most 2 dispatches only when dispatch 1 is a transient 429; at most 1 potentially billable attempt.     | 4 seconds / 6 seconds                    | $0.000480           | Show a retryable query message; user resubmission creates a new operation after an unknown outcome.                   |
+| `import.chunk.extract.v1` (disabled) | No approved profile. Enablement must set a measured ceiling and cannot inherit another operation's retry. | To be approved with the import eval      | To be approved      | Explicitly restart only the failed chunk; completed chunks remain fixed.                                              |
+| `answer.explain.v1` (disabled)       | No approved profile; deterministic answer templates remain the fallback.                                  | To be approved before enablement         | To be approved      | Return the already-computed deterministic answer template.                                                            |
+
+The 429 retry is allowed only for a parsed transient rate-limit response, not credit, quota, billing, spend-limit, or action-required 429s. `Retry-After` must be valid, no more than one second for these interactive initial operations, and fit the persisted deadline and reservation; otherwise the attempt completes as rate-limited without redispatch. The current Queue `max_batch_timeout` of five seconds cannot meet these publication-to-completion targets, so the implementation spike must prove a model-job batch wait of at most one second—by safely tightening the existing queue or using a latency-sensitive queue—before treating the deadlines as production SLO evidence.
+
+OpenAI recommends honoring `Retry-After`, using exponential backoff with jitter when it is absent, and bounding both attempts and total retry time; it also warns that unsuccessful requests consume rate-limit capacity. It distinguishes transient rate limits from quota, billing, and action-required failures that should not be retried. The approved policy uses those mechanics only for a classified transient 429 and is intentionally stricter than OpenAI's general advice to retry 500/503 responses. [OpenAI rate-limit retry guidance](https://developers.openai.com/api/docs/guides/rate-limits), [OpenAI error codes](https://developers.openai.com/api/docs/guides/error-codes)
+
+### Error identity and outcome matrix
+
+Every row records the common low-cardinality metric dimensions `environment`, `operation`, registry-enumerated metric-safe operation/retry-policy versions, `failure_tag`, `dispatch_certainty`, completion disposition, provider/model snapshot, attempt ordinal, retry decision, HTTP status family, observed phase, timeout bucket, and Queue delivery-attempt bucket. Registry values have bounded retention; full schema/prompt/policy hashes and build identifiers stay in controlled rows or traces. The matrix names only the additional dimensions specific to each identity.
+
+Pre-dispatch validation, authorization, configuration, and budget failures retain their existing precise application-owned tagged errors. The outer Model Operation classifier maps them to `not_dispatched` and `explicitly_rejected`; it does not collapse them into a generic request-rejected error with a secondary string code.
+
+| Error identity (`failure_tag`)          | Evidence and dispatch certainty                                                                                                                        | Automatic retry authority/budget                                                             | Completion disposition                     | Required metric dimensions                                           | User-facing outcome                                                                                  |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------- | ------------------------------------------ | -------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `RequestDeadlineExceededBeforeDispatch` | The request deadline expired before the durable dispatch transition; `not_dispatched`.                                                                 | Only a new user/request operation; never spend a retry after the deadline.                   | `explicitly_rejected`                      | Common + `timeout_scope=pre_dispatch`                                | Ask the user to try again; no provider call was purchased.                                           |
+| `ModelSchemaUnsupported`                | The generated schema is outside the provider's approved strict subset; `not_dispatched`. Build/test validation should prevent this in production.      | None; requires an operation/schema-version correction.                                       | `explicitly_rejected`                      | Common + bounded schema-capability code                              | Fail closed as a configuration fault; do not expose provider internals.                              |
+| `ModelProviderRateLimited`              | Explicit transient HTTP 429; `provider_reached` and the request is known rejected.                                                                     | The durable service may grant the operation's bounded 429 retry; the error grants nothing.   | `explicitly_rejected`; retry plan separate | Common + provider-delay bucket                                       | “Busy; retrying” only when scheduled; otherwise ask for an explicit retry.                           |
+| `ModelProviderQuotaDenied`              | HTTP 429 classified as quota, billing, spend, or action-required; `provider_reached`.                                                                  | None.                                                                                        | `explicitly_rejected`                      | Common + `rate_limit_class=quota_or_action`                          | Service temporarily unavailable; operator action is required.                                        |
+| `ModelLocalDeadlineExceeded`            | Xpensego's configured timeout aborts after `dispatched`; `possibly_dispatched`.                                                                        | None, regardless of SDK hint or remaining operation ceiling.                                 | `outcome_unknown`                          | Common + configured-timeout bucket                                   | Result could not be confirmed; no transaction is created; offer the permitted explicit priced retry. |
+| `ModelConnectionLost`                   | Fetch/connection failure after `dispatched`; `possibly_dispatched`. Record only `awaiting_response` or `reading_response`, not a guessed socket cause. | None.                                                                                        | `outcome_unknown`                          | Common + observed phase                                              | Same safe unknown-result message; do not imply the provider definitely failed.                       |
+| `ModelAttemptLeaseExpired`              | Recovery finds an expired `dispatched` lease without completion; `possibly_dispatched`. It proves missing completion, not a Worker crash.              | None. Recovery records the observation but cannot redispatch.                                | `outcome_unknown`                          | Common + lease-age bucket and `inference=completion_missing`         | Result could not be confirmed; no transaction is created; offer the permitted explicit priced retry. |
+| `ModelProviderResponseEmpty`            | An HTTP response arrived but has no usable body; `provider_reached`.                                                                                   | None.                                                                                        | `outcome_unknown`                          | Common + content-type class and provider-request-id presence         | Result could not be recovered; no transaction is created.                                            |
+| `ModelProviderResponseMalformed`        | A body arrived but the adapter could not parse JSON or the provider envelope; `provider_reached`.                                                      | None.                                                                                        | `outcome_unknown`                          | Common + bounded parse stage; never response content                 | Result could not be recovered; no transaction is created.                                            |
+| `ModelProviderServerError`              | Explicit HTTP 5xx after `dispatched`; `provider_reached`, but processing, billing, and result availability remain unproven.                            | None under Xpensego policy, even though provider/SDK general guidance may call it retryable. | `outcome_unknown`                          | Common; exact status belongs in traces, not metric labels            | Result could not be confirmed; no transaction is created; offer the permitted explicit priced retry. |
+| `ModelCallerCancelled`                  | Caller abort observed after `dispatched`; `possibly_dispatched`.                                                                                       | None.                                                                                        | `outcome_unknown`                          | Common + cancellation-source class                                   | Acknowledge cancellation and warn that provider outcome/cost could not be confirmed.                 |
+| `ModelProviderRequestRejected`          | Explicit non-429 HTTP 4xx invalid-request or authorization response; `provider_reached`.                                                               | None.                                                                                        | `explicitly_rejected`                      | Common + bounded rejection class                                     | Explain safe remediation without exposing provider internals.                                        |
+| `ModelProviderRefused`                  | A parsed provider response explicitly refuses or content-filters the operation; `result_received`.                                                     | None.                                                                                        | `explicitly_rejected`                      | Common + bounded refusal/finish class                                | Explain the refusal safely; do not expose provider internals or persist partial output.              |
+| `ModelOutputTruncated`                  | Response received with an incomplete/length finish class; `result_received`.                                                                           | None; increasing the token ceiling requires a reviewed operation-version change.             | `invalid_output`                           | Common + finish, schema, and prompt versions                         | Create review/clarification; never write a partial transaction.                                      |
+| `ModelStructuredOutputInvalid`          | Provider protocol parsed, but Effect Schema decoding of the structured output failed; `result_received`.                                               | None.                                                                                        | `invalid_output`                           | Common + bounded decode-reason code and schema version; never output | Create review/clarification; never write undecoded values.                                           |
+| `ModelSuggestionRejected`               | Structured output decoded, but deterministic application/domain financial validation rejected the suggestion; `result_received`.                       | None.                                                                                        | `invalid_output`                           | Common + bounded domain-rule code and ruleset version                | Create review/clarification; never write rejected financial values.                                  |
+
+The pinned AI SDK v7 source already gives missing-body and invalid-provider-response errors distinct identities and emits a `TimeoutError` for its configured timeout. Map them immediately into the tags above, and discard/redact response bodies before logging. [AI SDK v7 empty-response error](https://github.com/vercel/ai/blob/ai%407.0.48/packages/provider/src/errors/empty-response-body-error.ts), [AI SDK v7 invalid-response error](https://github.com/vercel/ai/blob/ai%407.0.48/packages/provider/src/errors/invalid-response-data-error.ts), [AI SDK v7 timeout source](https://github.com/vercel/ai/blob/ai%407.0.48/packages/ai/src/util/set-abort-timeout.ts)
+
+A terminated Worker cannot report its own typed error. Cloudflare may cancel unfinished work after the response/disconnect grace period and Workers may be terminated during runtime updates, so `ModelAttemptLeaseExpired` is constructed only by durable recovery rather than being mislabeled `WorkerTerminated`. Queue consumers have a longer documented wall-time limit, but that does not turn termination into a recoverable provider result. [Cloudflare `waitUntil` lifecycle](https://developers.cloudflare.com/workers/runtime-apis/context/), [Cloudflare Worker limits](https://developers.cloudflare.com/workers/platform/limits/)
+
+The provider port exposes distinct Effect `Schema.TaggedError` classes for the observable provider failures; `ModelAttemptLeaseExpired` belongs to durable recovery because the interrupted invocation cannot construct it, while `ModelSuggestionRejected` belongs to the application/domain validation service. Their fields contain only safe, bounded context such as attempt/operation version, provider/model, observed phase, timeout/elapsed duration, bounded status, lease timestamps, or registry-enumerated reason codes. They do not expose SDK types, raw causes, response bodies, headers, retryability, or disposition.
+
+User ids, operation ids, request ids, Worker invocation ids, Queue message ids, prompts, outputs, response bodies, raw headers, exception strings, and financial contents are not metric dimensions; opaque identifiers belong only in access-controlled rows/traces.
+
+Set `X-Client-Request-Id` to the opaque attempt identifier and persist OpenAI's returned `x-request-id` when present. The reviewed OpenAI material documents request identifiers for troubleshooting; it did not establish an idempotent result-retrieval contract for this call. That is an evidence gap, not proof that no private/provider mechanism exists, and it is insufficient to make an unknown attempt safe to retry. [OpenAI error and request diagnostics](https://developers.openai.com/api/docs/guides/error-codes)
+
+A user/operator may explicitly start the operation-permitted new priced operation from `outcome_unknown`. It receives a new operation identifier and reservation linked to the immutable root and consumes the lineage's explicit-restart grant; the original remains unknown. No ledger mutation is created from an unknown attempt.
+
+Issue #13 approved this reliability policy, including the operation ceilings, separate failure taxonomy, user recovery actions, and versioned retry authority, on 2026-08-06. ADR 0005 and the Specification now own the accepted invariants; this section preserves the supporting detail and sources.
 
 ## Cost controls for development and the small alpha
+
+The product owner approved these controls in issue #13 on 2026-08-07. The Specification owns the limits and triggers; the price table below remains dated research evidence only.
 
 ### Per-operation maximums at current prices
 
@@ -217,9 +276,9 @@ Create a `DeterministicModelGateway` Layer under test support, implementing the 
 
 - Address a fixture by operation id/version plus canonical input digest, not raw substring heuristics.
 - Fixtures contain only synthetic or irreversibly redacted Source Records already admitted to the evaluation corpus.
-- Each fixture specifies the exact decoded output, model/prompt/schema labels, artificial usage/cost, latency clock advance, and one of `Success`, `ExplicitlyRejected`, `RateLimited`, `InvalidOutput`, or `OutcomeUnknown`.
+- Each fixture specifies model/prompt/schema labels, artificial usage/cost, latency clock advance and, independently, the observed tagged result/error, expected completion disposition, and expected retry plan. A transient 429 is therefore `ModelProviderRateLimited` + `explicitly_rejected` + either `none` or an authorized `schedule_rate_limit_retry`; it is not a top-level outcome. Successful fixtures also provide the exact decoded output.
 - Unregistered input fails closed with a typed `FixtureMissing`; it never calls a real provider.
-- Scripted sequences prove lease recovery and the single safe 429 retry. Duplicate/concurrent calls prove one fixture consumption and one persisted result.
+- Scripted sequences prove lease recovery and each operation's persisted 429 retry ceiling. Duplicate/concurrent calls prove one fixture consumption per authorized provider attempt and one persisted result.
 - A separate deterministic parser may handle known bank/UPI formats, but it is domain parsing code, not a hidden “AI fallback.”
 
 This adapter makes local development and the full test suite reproducible while preserving the same idempotency, budget and error behavior as production.
@@ -237,23 +296,23 @@ The initial route is releasable only when:
 - **100%** of intentionally ambiguous or missing-amount fixtures become clarification/review rather than a silent transaction;
 - date resolution is **100%** correct after deterministic timezone validation on the corpus's date-boundary cases;
 - counterparty extraction and supported query-intent/slot exact match are at least **95% in every named slice**, not only overall;
-- Queue replay, concurrent claims and Worker retry purchase one provider call per operation; unknown outcomes purchase no automatic retry;
+- Queue replay, concurrent claims and Worker retry never exceed the persisted operation/request attempt budget; unknown outcomes purchase no automatic retry;
 - the nano route's provider-call p95 is at most 2.5 seconds in deployed staging so the five-second Telegram experience budget retains room for queue/database/delivery work;
 - measured worst-case reservations and actual usage stay within the rate-card calculations; and
 - a secret/log/analytics review finds no financial contents or credentials outside approved persistence.
 
 Evaluate mini against the exact failing complex-import slice. Enable it only if it reduces critical errors by at least 30% relative to nano, introduces zero silent critical-field inventions, stays within $0.02 per bounded chunk and passes the same privacy/latency gates. Otherwise keep it disabled.
 
-## Proposed post-approval implementation gates
+## Required implementation proof gates
 
-Issue #13 approves or rejects the provider/model/routing recommendation only; it does not install packages or claim runtime evidence. An approval must synchronize the ADR, Specification, and Checklist, then authorize a separate disposable vertical-spike ticket before the full parser:
+Approval in issue #13 did not install packages or create runtime evidence. [Issue #19](https://github.com/Vaibtan/XpensGo/issues/19) must prove this disposable vertical slice before the full parser:
 
 1. Pin only `ai@7.0.48` and `@ai-sdk/openai@4.0.27` as direct dependencies; capture the lockfile's transitive gateway and Zod peer impact in dependency review.
 2. Bundle and run one Effect-owned structured extraction in local Workerd and deployed staging using Xpensego's actual compatibility date/flags. Prove no Vercel service call, global-scope fetch, unsupported Node API or material bundle/cold-start regression.
 3. Prove an Effect Schema can generate the provider JSON Schema and revalidate output without a Zod application schema. Snapshot the generated schema and fail CI on unreviewed drift.
 4. Prove `maxRetries: 0`, total timeout, token ceiling, `store: false`, explicit snapshot id, opaque client request id, typed finish/error mapping and content-redacted telemetry from the built Worker.
 5. Use provider response headers/usage to persist one successful result and settle its atomic cost reservation; prove Queue duplicate/concurrent execution does not repurchase it.
-6. Inject deterministic timeout, network loss, 429, 5xx, refusal, truncation and invalid-output cases. Prove only the explicit 429 receives one automatic retry and every ambiguous case remains `outcome_unknown` without a ledger mutation.
+6. Inject deterministic timeout, network loss, 429, 5xx, missing/malformed response, expired execution lease, refusal, truncation and invalid-output cases. Prove that only a transient 429 receives the operation/request-authorized number of automatic retries and every ambiguous case preserves its typed identity while ending `outcome_unknown` without a ledger mutation.
 7. Run the corpus comparison and publish field/slice results, latency, token use and cost without fixture contents.
 8. Keep real financial data disabled. Approval of the provider implementation is not approval of the invite-readiness privacy gate.
 
@@ -275,6 +334,18 @@ npx ctx7@latest docs /vercel/ai "Should a Cloudflare Workers TypeScript applicat
 
 npx ctx7@latest library "@ai-sdk/openai" "Can @ai-sdk/openai run in Cloudflare Workers with ai core generateText structured output, explicit request timeout and retry control, usage metadata, a fixed OpenAI model snapshot, and an Effect Schema Standard Schema boundary without application Zod schemas?"
 npx ctx7@latest docs /vercel/ai "Can @ai-sdk/openai run in Cloudflare Workers with ai core generateText structured output, explicit request timeout and retry control, usage metadata, a fixed OpenAI model snapshot, and an Effect Schema Standard Schema boundary without application Zod schemas?"
+
+npx ctx7@latest library "Vercel AI SDK" "For AI SDK v7 generateText in a Cloudflare Worker, what are the exact maxRetries, timeout, abortSignal, APICallError status/isRetryable/cause semantics, and how should an application distinguish timeout, connection loss, malformed response, and HTTP errors while retaining operation-specific retry policy?"
+npx ctx7@latest docs /vercel/ai "For AI SDK v7 generateText in a Cloudflare Worker, what are the exact maxRetries, timeout, abortSignal, APICallError status/isRetryable/cause semantics, and how should an application distinguish timeout, connection loss, malformed response, and HTTP errors while retaining operation-specific retry policy?"
+
+npx ctx7@latest library "OpenAI API" "What current OpenAI API documentation defines request IDs, retryable HTTP errors, rate-limit Retry-After behavior, timeouts, malformed responses, and whether request IDs or Responses API provide an idempotent result-retrieval contract for a dispatched structured-output call?"
+npx ctx7@latest docs /websites/developers_openai_api "What current OpenAI API documentation defines request IDs, retryable HTTP errors, rate-limit Retry-After behavior, timeouts, malformed responses, and whether request IDs or Responses API provide an idempotent result-retrieval contract for a dispatched structured-output call?"
+
+npx ctx7@latest library "Cloudflare Workers" "For a Cloudflare Worker and Queue consumer calling an external model API, what are the current documented execution-lifetime, waitUntil, retry, delay, acknowledgment, dead-letter, and at-least-once delivery semantics relevant to distinguishing Worker termination from network timeout and assigning operation-specific retry authority?"
+npx ctx7@latest docs /llmstxt/developers_cloudflare_workers_llms-full_txt "For a Cloudflare Worker and Queue consumer calling an external model API, what are the current documented execution-lifetime, waitUntil, retry, delay, acknowledgment, dead-letter, and at-least-once delivery semantics relevant to distinguishing Worker termination from network timeout and assigning operation-specific retry authority?"
+
+npx ctx7@latest library "Effect" "How should Effect TypeScript model distinct tagged error identities, operation-specific retry schedules/budgets, timeout causes, and metrics dimensions without collapsing several failures into one error type?"
+npx ctx7@latest docs /effect-ts/effect "How should Effect TypeScript model distinct tagged error identities, operation-specific retry schedules/budgets, timeout causes, and metrics dimensions without collapsing several failures into one error type?"
 ```
 
 Registry, repository and issue inspection executed:
@@ -290,6 +361,13 @@ node --version
 npm --version
 gh issue view 12 --repo Vaibtan/XpensGo --json title,body,labels,state,url
 gh issue view 13 --repo Vaibtan/XpensGo --json number,title,body,state,url
+gh api "repos/vercel/ai/git/ref/tags/ai%407.0.48"
+gh api "repos/vercel/ai/contents/packages/ai/src/util/prepare-retries.ts?ref=ai%407.0.48"
+gh api "repos/vercel/ai/contents/packages/ai/src/util/set-abort-timeout.ts?ref=ai%407.0.48"
+gh api "repos/vercel/ai/contents/packages/provider/src/errors/api-call-error.ts?ref=ai%407.0.48"
+gh api "repos/vercel/ai/contents/packages/provider/src/errors/empty-response-body-error.ts?ref=ai%407.0.48"
+gh api "repos/vercel/ai/contents/packages/provider/src/errors/invalid-response-data-error.ts?ref=ai%407.0.48"
+gh api "repos/vercel/ai/contents/packages/provider-utils/src/handle-fetch-error.ts?ref=ai%407.0.48"
 ```
 
 Additional checks performed after writing this note:
@@ -297,4 +375,4 @@ Additional checks performed after writing this note:
 - `npm exec prettier -- --check docs/research/model-gateway-provider-routing.md`
 - a native Node `fetch` check followed redirects for every unique public source URL in this note;
 - `gh issue view` verified the private-repository issue links; and
-- `git status --short` verified that this task added only this research asset and did not touch the existing `.gitignore`, `.agents/`, or `.playwright-mcp/` changes.
+- `git -c safe.directory=D:/SWE_DEV_NEW/XpensGo status --short` and a path-scoped diff verified that this task modified only this research asset and did not touch the existing `.gitignore`, `.agents/`, or `.playwright-mcp/` changes.

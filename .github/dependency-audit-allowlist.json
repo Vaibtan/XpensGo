@@ -1,66 +1,8 @@
 {
   "schemaVersion": 1,
-  "reviewedAt": "2026-08-01",
-  "expiresAt": "2026-08-15",
-  "packageVulnerabilities": {
-    "@opennextjs/aws": {
-      "maximumSeverity": "moderate",
-      "isDirect": false
-    },
-    "@opennextjs/cloudflare": {
-      "maximumSeverity": "moderate",
-      "isDirect": true
-    },
-    "better-auth": {
-      "maximumSeverity": "moderate",
-      "isDirect": true
-    },
-    "next": {
-      "maximumSeverity": "high",
-      "isDirect": true
-    },
-    "postcss": {
-      "maximumSeverity": "high",
-      "isDirect": false
-    },
-    "sharp": {
-      "maximumSeverity": "high",
-      "isDirect": false
-    }
-  },
-  "advisories": {
-    "1117015": {
-      "ghsa": "GHSA-qx2v-qp2m-jg93",
-      "package": "postcss",
-      "allowedInstalledVersions": ["8.4.31"],
-      "affectedRange": "<8.5.10",
-      "maximumSeverity": "moderate",
-      "disposition": "Temporarily accepted because Xpensego does not compile user-supplied CSS; CI is read-only and receives no production credentials."
-    },
-    "1124252": {
-      "ghsa": "GHSA-6g55-p6wh-862q",
-      "package": "postcss",
-      "allowedInstalledVersions": ["8.4.31"],
-      "affectedRange": "<=8.5.11",
-      "maximumSeverity": "high",
-      "disposition": "Temporarily accepted because Xpensego does not process attacker-controlled CSS or source maps; CI is read-only and receives no production credentials."
-    },
-    "1124288": {
-      "ghsa": "GHSA-r28c-9q8g-f849",
-      "package": "postcss",
-      "allowedInstalledVersions": ["8.4.31"],
-      "affectedRange": "<=8.5.17",
-      "maximumSeverity": "high",
-      "disposition": "Temporarily accepted because Xpensego does not process attacker-controlled CSS or source maps; CI is read-only and receives no production credentials."
-    },
-    "1124066": {
-      "ghsa": "GHSA-f88m-g3jw-g9cj",
-      "package": "sharp",
-      "allowedInstalledVersions": ["0.34.5"],
-      "affectedRange": "<0.35.0",
-      "maximumSeverity": "high",
-      "disposition": "Temporarily accepted while no untrusted image-processing path is enabled; receipt-image work is blocked on a compatible patched Next.js and OpenNext tree."
-    }
-  },
-  "requiredAction": "Re-evaluate on every lockfile change and by the expiry date. Upgrade the pinned Next.js and OpenNext tree when a compatible release removes the advisories; do not force a Next.js downgrade or an unverified postcss or sharp override."
+  "reviewedAt": "2026-08-08",
+  "expiresAt": "2026-11-06",
+  "packageVulnerabilities": {},
+  "advisories": {},
+  "requiredAction": "No dependency-audit exceptions are approved. Remediate every new finding or document a fresh, time-bounded review before merge."
 }

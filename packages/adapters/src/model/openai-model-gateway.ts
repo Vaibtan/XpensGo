@@ -222,8 +222,14 @@ function isQuotaOrActionRequired(responseBody: string | undefined): boolean {
   }
 }
 
-function computeNanoCostMicroUsd(inputTokens: number, outputTokens: number): number {
-  return Math.ceil(inputTokens * 0.2 + outputTokens * 1.25);
+function computeNanoCostMicroUsd(
+  inputTokens: number,
+  cachedInputTokens: number,
+  outputTokens: number,
+): number {
+  const boundedCachedTokens = Math.min(inputTokens, cachedInputTokens);
+  const uncachedInputTokens = inputTokens - boundedCachedTokens;
+  return Math.ceil(uncachedInputTokens * 0.2 + boundedCachedTokens * 0.02 + outputTokens * 1.25);
 }
 
 /** Create the sole provider-backed Model Gateway adapter for one Worker invocation. */
@@ -305,13 +311,14 @@ export function makeOpenAIModelGateway(config: OpenAIModelGatewayConfig): ModelG
       );
       const inputTokens = generated.usage.inputTokens ?? 0;
       const outputTokens = generated.usage.outputTokens ?? 0;
+      const cachedInputTokens = generated.usage.inputTokenDetails.cacheReadTokens ?? 0;
       return {
-        costMicroUsd: computeNanoCostMicroUsd(inputTokens, outputTokens),
+        costMicroUsd: computeNanoCostMicroUsd(inputTokens, cachedInputTokens, outputTokens),
         finishReason: "stop",
         output,
         providerRequestId: requestId(generated.response.headers),
         usage: {
-          cachedInputTokens: generated.usage.inputTokenDetails.cacheReadTokens ?? 0,
+          cachedInputTokens,
           inputTokens,
           outputTokens,
           reasoningTokens: generated.usage.outputTokenDetails.reasoningTokens ?? 0,

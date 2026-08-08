@@ -66,6 +66,14 @@ const validProbeCommand = {
   otherOwnerUserId: "8ed91076-bdf7-4406-8579-d8031dca3267",
 } as const;
 
+const validModelProbeCommand = {
+  fixtureId: "bank-debit-exact",
+  operation: "startSyntheticExtraction",
+  operationId: "913c7c0b-b6f9-47f2-8174-a8267edc9bba",
+  runId: "model-unit-run",
+  userId: "0a37f42e-a007-4d0d-adc2-98098f486ecc",
+} as const;
+
 function makeWorkerRequest(url: string, init?: RequestInit): Parameters<typeof worker.fetch>[0] {
   // SAFETY: the Workers test pool constructs the same runtime Request but exposes a wider cf generic.
   return new Request(url, init) as Parameters<typeof worker.fetch>[0];
@@ -235,6 +243,71 @@ describe("Xpensego API Worker", () => {
     expect(response.status).toBe(404);
   });
 
+  it("does not expose the model acceptance driver in development", async () => {
+    const response = await worker.fetch(
+      makeWorkerRequest("https://xpensego.test/_internal/model-gateway-proof", {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${validProbeBindings.PHASE1_PROBE_SECRET}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(validModelProbeCommand),
+      }),
+      { ...env, ...validProbeBindings },
+      createExecutionContext(),
+    );
+
+    expect(response.status).toBe(404);
+  });
+
+  it("hides the staging model acceptance driver before acquiring database resources", async () => {
+    const stagingEnv = databaseForbiddenEnv();
+    Object.assign(stagingEnv, validProbeBindings, {
+      ENVIRONMENT: "staging",
+      MODEL_GATEWAY_PROVIDER: "openai",
+    });
+    const response = await worker.fetch(
+      makeWorkerRequest("https://xpensego.test/_internal/model-gateway-proof", {
+        method: "POST",
+        headers: {
+          authorization: "Bearer wrong-secret",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(validModelProbeCommand),
+      }),
+      stagingEnv,
+      createExecutionContext(),
+    );
+
+    expect(response.status).toBe(404);
+  });
+
+  it("rejects a non-allow-listed staging model fixture before acquiring database resources", async () => {
+    const stagingEnv = databaseForbiddenEnv();
+    Object.assign(stagingEnv, validProbeBindings, {
+      ENVIRONMENT: "staging",
+      MODEL_GATEWAY_PROVIDER: "openai",
+    });
+    const response = await worker.fetch(
+      makeWorkerRequest("https://xpensego.test/_internal/model-gateway-proof", {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${validProbeBindings.PHASE1_PROBE_SECRET}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ ...validModelProbeCommand, fixtureId: "not-registered" }),
+      }),
+      stagingEnv,
+      createExecutionContext(),
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      version: 1,
+      error: { code: "invalid_probe_command" },
+    });
+  });
+
   it("hides the staging acceptance driver when authorization is invalid", async () => {
     const response = await worker.fetch(
       makeWorkerRequest("https://xpensego.test/_internal/phase1-staging-proof", {
@@ -394,6 +467,29 @@ describe("Xpensego API Worker", () => {
     expect(result.retryBatch).toEqual({ retry: false });
     expect(result.explicitAcks).toEqual([]);
     expect(result.retryMessages).toEqual([{ msgId: "unavailable-outbox-message" }]);
+  });
+
+  it("treats a model Queue delivery as a wake-up when PostgreSQL authority is unavailable", async () => {
+    const batch = createMessageBatch("xpensego-platform-jobs-development", [
+      {
+        id: "unavailable-model-operation",
+        timestamp: new Date("2026-08-08T00:00:00.000Z"),
+        attempts: 1,
+        body: {
+          version: 1,
+          kind: "model.operation.ready",
+          operationId: "913c7c0b-b6f9-47f2-8174-a8267edc9bba",
+          correlationId: platformFixtureIds.correlationId,
+        },
+      },
+    ]);
+    const context = createExecutionContext();
+
+    await worker.queue(batch, unavailableDatabaseEnv(), context);
+
+    const result = await getQueueResult(batch, context);
+    expect(result.explicitAcks).toEqual([]);
+    expect(result.retryMessages).toEqual([{ msgId: "unavailable-model-operation" }]);
   });
 
   it("does not blindly retry a batch after an unclassified defect", async () => {

@@ -11,6 +11,7 @@
   },
   "vars": {
     "ENVIRONMENT": "development",
+    "MODEL_GATEWAY_PROVIDER": "deterministic",
     "PUBLIC_WEB_ORIGIN": "https://xpensego-web.vaibhav21296.workers.dev",
     "SERVICE_NAME": "xpensego-api",
     "TELEGRAM_BOT_USERNAME": "",
@@ -33,7 +34,7 @@
       {
         "queue": "xpensego-platform-jobs-development",
         "max_batch_size": 10,
-        "max_batch_timeout": 5,
+        "max_batch_timeout": 1,
         "max_retries": 3,
         "dead_letter_queue": "xpensego-platform-jobs-development-dlq",
         "retry_delay": 30,
@@ -56,6 +57,7 @@
       "name": "xpensego-api-staging",
       "vars": {
         "ENVIRONMENT": "staging",
+        "MODEL_GATEWAY_PROVIDER": "openai",
         "PUBLIC_WEB_ORIGIN": "https://xpensego-web-staging.vaibhav21296.workers.dev",
         "SERVICE_NAME": "xpensego-api",
         "TELEGRAM_BOT_USERNAME": "xpensego_staging_bot",
@@ -78,7 +80,7 @@
           {
             "queue": "xpensego-platform-jobs-staging",
             "max_batch_size": 10,
-            "max_batch_timeout": 5,
+            "max_batch_timeout": 1,
             "max_retries": 3,
             "dead_letter_queue": "xpensego-platform-jobs-staging-dlq",
             "retry_delay": 30,

@@ -11,6 +11,7 @@ type IsolatedTestDatabaseName =
   | "xpensego_inbound_store_integration"
   | "xpensego_identity_store_integration"
   | "xpensego_migration_integration"
+  | "xpensego_model_operation_integration"
   | "xpensego_outbox_store_integration"
   | "xpensego_telegram_ingress_integration"
   | "xpensego_telegram_processing_integration"

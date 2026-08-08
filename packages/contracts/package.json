@@ -7,6 +7,7 @@
     "./identity/better-auth-session": "./src/identity/better-auth-session.ts",
     "./identity/identity-api": "./src/identity/identity-api.ts",
     "./identity/identity": "./src/identity/identity.ts",
+    "./model/model-operation-job": "./src/model/model-operation-job.ts",
     "./platform/correlation-id": "./src/platform/correlation-id.ts",
     "./platform/job-id": "./src/platform/job-id.ts",
     "./platform/outbox-job": "./src/platform/outbox-job.ts",

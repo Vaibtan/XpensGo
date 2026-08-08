@@ -12,6 +12,9 @@ import { makePostgresOutboxPersistenceLayer } from "@xpensego/adapters/postgres/
 import { makePostgresIdentityStoreLayer } from "@xpensego/adapters/postgres/identity-store";
 import { makePostgresTelegramIngressStoreLayer } from "@xpensego/adapters/postgres/telegram-ingress-store";
 import { makePostgresTelegramQueueRuntimeLayer } from "@xpensego/adapters/postgres/telegram-queue-runtime";
+import { makePostgresModelOperationStoreLayer } from "@xpensego/adapters/postgres/model-operation-store";
+import { makeDeterministicModelGatewayLayer } from "@xpensego/adapters/model/deterministic-model-gateway";
+import { makeOpenAIModelGatewayLayer } from "@xpensego/adapters/model/openai-model-gateway";
 import { makeTelegramBotApiLayer } from "@xpensego/adapters/telegram/bot-api";
 import { webCryptoLinkChallengeLayer } from "@xpensego/adapters/web-crypto/link-challenge-crypto";
 import {
@@ -23,6 +26,10 @@ import {
   type PlatformStatusJobV1 as PlatformStatusQueueJob,
 } from "@xpensego/contracts/platform/platform-status-job";
 import { CorrelationId } from "@xpensego/contracts/platform/correlation-id";
+import {
+  ModelOperationJobV1,
+  type ModelOperationJobV1 as ModelOperationQueueJob,
+} from "@xpensego/contracts/model/model-operation-job";
 import type { PlatformInternalError } from "@xpensego/contracts/platform/platform-api";
 import {
   dispatchPendingOutbox,
@@ -34,20 +41,29 @@ import { processTelegramEvent } from "@xpensego/domain/channel/process-telegram-
 import { readPlatformStatus } from "@xpensego/domain/platform/read-platform-status";
 import type { RuntimeConfig } from "@xpensego/domain/platform/runtime-config";
 import { RuntimeTelemetry } from "@xpensego/domain/platform/runtime-telemetry";
+import { executePreparedModelOperation } from "@xpensego/domain/model/model-operation";
 import { Effect, Layer, Redacted, Schema } from "effect";
 
 import { handleApplicationRequest, handleIdentityRequest } from "./http.js";
 import { makeOutboxQueuePublicationLayer } from "./outbox-queue-publication.js";
 import { handlePhase1StagingProbe } from "./phase1-staging-probe.js";
 import { verifyAndDecodeTelegramWebhook } from "./telegram-webhook.js";
+import { developmentModelFixtures } from "./development-model-fixtures.js";
+import { handleModelGatewayStagingProbe } from "./model-gateway-staging-probe.js";
 
-const PlatformQueueJobV1 = Schema.Union(PlatformStatusJobV1, OutboxJobV1);
+const PlatformQueueJobV1 = Schema.Union(PlatformStatusJobV1, OutboxJobV1, ModelOperationJobV1);
 const TelegramWebhookSecret = Schema.String.pipe(
   Schema.minLength(1),
   Schema.maxLength(256),
   Schema.pattern(/^[A-Za-z0-9_-]+$/),
 );
 const telegramWebhookMaximumBodyBytes = 64 * 1_024;
+const OpenAIAPIKey = Schema.String.pipe(Schema.minLength(20), Schema.maxLength(256));
+
+class InvalidModelGatewayConfig extends Schema.TaggedError<InvalidModelGatewayConfig>()(
+  "InvalidModelGatewayConfig",
+  { provider: Schema.Literal("openai") },
+) {}
 
 class InvalidPlatformQueueJob extends Schema.TaggedError<InvalidPlatformQueueJob>()(
   "InvalidPlatformQueueJob",
@@ -114,6 +130,22 @@ function outboxQueueInvocationLayer(env: CloudflareBindings) {
       publicWebOrigin: env.PUBLIC_WEB_ORIGIN,
     }),
   );
+}
+
+function modelQueueInvocationLayer(env: CloudflareBindings) {
+  const storeLayer = makePostgresModelOperationStoreLayer(
+    Redacted.make(env.HYPERDRIVE.connectionString),
+  );
+  if (env.MODEL_GATEWAY_PROVIDER === "deterministic") {
+    return Layer.merge(storeLayer, makeDeterministicModelGatewayLayer(developmentModelFixtures));
+  }
+
+  const apiKey = Schema.decodeUnknownEither(OpenAIAPIKey)(env.OPENAI_API_KEY);
+  const gatewayLayer =
+    apiKey._tag === "Right"
+      ? makeOpenAIModelGatewayLayer({ apiKey: Redacted.make(apiKey.right) })
+      : Layer.fail(new InvalidModelGatewayConfig({ provider: "openai" }));
+  return Layer.merge(storeLayer, gatewayLayer);
 }
 
 function scheduledInvocationLayer(env: CloudflareBindings) {
@@ -199,6 +231,10 @@ async function runFetch(
   env: CloudflareBindings,
   context: ExecutionContext,
 ): Promise<Response> {
+  const modelProbeResponse = await handleModelGatewayStagingProbe(request, env);
+  if (modelProbeResponse !== undefined) {
+    return modelProbeResponse;
+  }
   const probeResponse = await handlePhase1StagingProbe(request, env);
   if (probeResponse !== undefined) {
     return probeResponse;
@@ -318,6 +354,12 @@ const processOutboxJob = Effect.fn("Api.processOutboxJob")(function* (job: Outbo
   });
 });
 
+const processModelOperationJob = Effect.fn("Api.processModelOperationJob")(function* (
+  job: ModelOperationQueueJob,
+) {
+  return yield* executePreparedModelOperation({ operationId: job.operationId });
+});
+
 function queueRetryDelaySeconds(attempts: number): number {
   return Math.min(30 * 2 ** Math.min(Math.max(attempts - 1, 0), 4), 300);
 }
@@ -426,6 +468,77 @@ function processOutboxMessageAtBoundary(
   );
 }
 
+function processModelOperationMessageAtBoundary(
+  message: Message<unknown>,
+  queueName: string,
+  job: ModelOperationQueueJob,
+) {
+  const defer = (errorTag: string, retryAfterMilliseconds?: number) =>
+    Effect.sync(() => {
+      message.retry({
+        delaySeconds:
+          retryAfterMilliseconds === undefined
+            ? queueRetryDelaySeconds(message.attempts)
+            : Math.max(1, Math.ceil(retryAfterMilliseconds / 1_000)),
+      });
+      // oxlint-disable-next-line no-console -- Model Queue logs contain no prompts, output, or provider bodies.
+      console.error(
+        JSON.stringify({
+          event: "ModelOperationQueueJobDeferred",
+          errorTag,
+          messageId: message.id,
+          queue: queueName,
+          attempts: message.attempts,
+        }),
+      );
+    });
+
+  return processModelOperationJob(job).pipe(
+    Effect.flatMap((outcome) =>
+      outcome._tag === "Deferred" || outcome._tag === "RetryScheduled"
+        ? defer(outcome._tag, outcome.retryAfterMilliseconds)
+        : Effect.sync(() => {
+            message.ack();
+          }),
+    ),
+    Effect.catchTags({
+      ModelOperationBudgetExceeded: () =>
+        Effect.sync(() => {
+          message.ack();
+        }),
+      ModelOperationNotFound: (error) =>
+        Effect.sync(() => {
+          message.ack();
+          // oxlint-disable-next-line no-console -- Missing authority is terminal and no Queue body is logged.
+          console.error(
+            JSON.stringify({
+              event: "ModelOperationQueueJobRejected",
+              errorTag: error._tag,
+              messageId: message.id,
+              queue: queueName,
+            }),
+          );
+        }),
+      ModelOperationPersistenceUnavailable: (error) => defer(error._tag),
+    }),
+    Effect.catchAllCause((cause) =>
+      Effect.sync(() => {
+        message.ack();
+        // oxlint-disable-next-line no-console -- Unclassified model defects are terminal until reviewed.
+        console.error(
+          JSON.stringify({
+            event: "TerminalModelOperationDefect",
+            messageId: message.id,
+            queue: queueName,
+            attempts: message.attempts,
+            causeTag: cause._tag,
+          }),
+        );
+      }),
+    ),
+  );
+}
+
 interface QueueMessageWithJob<Job> {
   readonly message: Message<unknown>;
   readonly job: Job;
@@ -434,7 +547,8 @@ interface QueueMessageWithJob<Job> {
 function retryQueueMessagesAfterLayerFailure(
   messages: ReadonlyArray<QueueMessageWithJob<unknown>>,
   queueName: string,
-  event: "OutboxQueueJobDeferred" | "PlatformStatusQueueJobDeferred",
+  event:
+    "ModelOperationQueueJobDeferred" | "OutboxQueueJobDeferred" | "PlatformStatusQueueJobDeferred",
   errorTag: string,
 ) {
   return Effect.sync(() => {
@@ -463,6 +577,7 @@ function runQueue(batch: MessageBatch<unknown>, env: CloudflareBindings): Promis
     );
     const platformStatusMessages: Array<QueueMessageWithJob<PlatformStatusQueueJob>> = [];
     const outboxMessages: Array<QueueMessageWithJob<OutboxQueueJob>> = [];
+    const modelOperationMessages: Array<QueueMessageWithJob<ModelOperationQueueJob>> = [];
 
     for (const decodedMessage of decodedMessages) {
       if (decodedMessage === null) {
@@ -474,8 +589,13 @@ function runQueue(batch: MessageBatch<unknown>, env: CloudflareBindings): Promis
           message: decodedMessage.message,
           job: decodedMessage.job,
         });
-      } else {
+      } else if (decodedMessage.job.kind === "outbox.message.ready") {
         outboxMessages.push({
+          message: decodedMessage.message,
+          job: decodedMessage.job,
+        });
+      } else {
+        modelOperationMessages.push({
           message: decodedMessage.message,
           job: decodedMessage.job,
         });
@@ -515,6 +635,32 @@ function runQueue(batch: MessageBatch<unknown>, env: CloudflareBindings): Promis
             error._tag,
           ),
         ),
+      );
+    }
+
+    if (modelOperationMessages.length > 0) {
+      yield* Effect.forEach(
+        modelOperationMessages,
+        ({ message, job }) => processModelOperationMessageAtBoundary(message, batch.queue, job),
+        { concurrency: 5, discard: true },
+      ).pipe(
+        Effect.provide(modelQueueInvocationLayer(env)),
+        Effect.catchTags({
+          InvalidModelGatewayConfig: (error) =>
+            retryQueueMessagesAfterLayerFailure(
+              modelOperationMessages,
+              batch.queue,
+              "ModelOperationQueueJobDeferred",
+              error._tag,
+            ),
+          ModelOperationPersistenceUnavailable: (error) =>
+            retryQueueMessagesAfterLayerFailure(
+              modelOperationMessages,
+              batch.queue,
+              "ModelOperationQueueJobDeferred",
+              error._tag,
+            ),
+        }),
       );
     }
   }).pipe(

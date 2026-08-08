@@ -8,6 +8,7 @@
     "deploy:staging": "wrangler deploy --env staging",
     "dev": "wrangler dev",
     "proof:phase1:staging": "tsx scripts/phase1-staging-proof.ts",
+    "proof:model:staging": "tsx scripts/model-gateway-staging-proof.ts",
     "operator:telegram:recover": "tsx scripts/recover-telegram-delivery.ts",
     "test": "vitest run",
     "test:integration": "vitest run --config vitest.integration.config.ts",
@@ -19,6 +20,7 @@
     "@xpensego/adapters": "0.1.0",
     "@xpensego/contracts": "0.1.0",
     "@xpensego/domain": "0.1.0",
+    "@xpensego/testing": "0.1.0",
     "effect": "3.22.1"
   },
   "devDependencies": {
@@ -26,7 +28,6 @@
     "@effect/platform-node": "0.108.1",
     "@effect/sql-pg": "0.53.0",
     "@xpensego/config": "0.1.0",
-    "@xpensego/testing": "0.1.0",
     "tsx": "4.23.1",
     "typescript": "6.0.3",
     "vitest": "4.1.10",

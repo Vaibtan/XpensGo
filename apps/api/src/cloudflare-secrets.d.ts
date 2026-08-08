@@ -13,6 +13,7 @@ declare global {
     readonly BUILD_REVISION?: string;
     readonly PHASE1_PROBE_SECRET?: string;
     readonly PHASE1_PROBE_SIGNING_SECRET?: string;
+    readonly OPENAI_API_KEY?: string;
     readonly TELEGRAM_BOT_TOKEN?: string;
     readonly TELEGRAM_WEBHOOK_SECRET?: string;
   }

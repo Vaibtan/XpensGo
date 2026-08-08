@@ -115,6 +115,8 @@ Decision ownership is role-based until named operators are added to the project:
 
 - [x] Select the OpenAI-only initial model provider, pinned nano routing, Effect Schema boundary, operation-specific retry policy, and budget/kill-switch controls; preserve the deterministic Model Gateway adapter for tests and normal local development.
 - [ ] Complete the [model-gateway Workerd, durable-attempt, failure, cost, and synthetic-corpus proof](https://github.com/Vaibtan/XpensGo/issues/19) before provider-backed parsing; remove AI SDK if its conditional adapter gate fails and never retain a fallback implementation.
+  - Local gates pass for the Effect-owned adapter, strict root-object schema, durable attempts/restart/budgets, failure injection, Queue replay, Workerd, and the versioned synthetic spike corpus. The API Worker delta from `dceef03` is +1,402.31 KiB raw / +220.32 KiB gzip (4,904.26 / 859.88 KiB total), with no dependency-audit findings.
+  - Remaining evidence is forward migration `0011`, same-revision staging deployment with `OPENAI_API_KEY`, deployed startup impact, and the provider-backed corpus proof. This spike corpus does not complete the broader release corpus in Track 3A.
 - [ ] Implement debit and credit creation from both a web form and ordinary-language Telegram messages.
 - [ ] Support one or multiple transactions, one focused missing-amount clarification, English and Hinglish fixtures, and relative dates resolved in the user's timezone.
 - [ ] Store each monetary value as a positive integer minor-unit `BIGINT` with an ISO 4217 currency and explicit `debit | credit` direction; prohibit floating-point and signed-amount representations.

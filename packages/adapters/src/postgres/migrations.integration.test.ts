@@ -41,6 +41,7 @@ describe("PostgreSQL migrations", () => {
         [8, "telegram_ingress"],
         [9, "telegram_processing"],
         [10, "telegram_delivery_recovery"],
+        [11, "model_operations"],
       ]);
       expect(secondRun).toEqual([]);
     });
@@ -69,8 +70,16 @@ describe("PostgreSQL migrations", () => {
             readonly canUpdateChannelUnlink: boolean;
             readonly canUpdateOutboxReceiptAttempts: boolean;
             readonly canInsertMigrations: boolean;
+            readonly canInsertModelAttempts: boolean;
+            readonly canInsertModelBudgetAlerts: boolean;
+            readonly canInsertModelOperations: boolean;
             readonly canInsertTelegramDeliveryRecoveries: boolean;
             readonly canUpdateOutboxPayload: boolean;
+            readonly canUpdateModelBudgetCeiling: boolean;
+            readonly canUpdateModelBudgetKillSwitch: boolean;
+            readonly canUpdateModelBudgetReservation: boolean;
+            readonly canUpdateModelCanonicalInput: boolean;
+            readonly canUpdateModelStatus: boolean;
             readonly canUpdateOutboxStatus: boolean;
             readonly canUpdateTelegramDeliveryRecoveries: boolean;
             readonly canUpdateUserTimezone: boolean;
@@ -117,6 +126,34 @@ describe("PostgreSQL migrations", () => {
               ) AS "canUpdateOutboxReceiptAttempts",
               has_table_privilege(current_user, 'xpensego_migrations', 'INSERT')
                 AS "canInsertMigrations",
+              has_table_privilege(current_user, 'model_operations', 'INSERT')
+                AS "canInsertModelOperations",
+              has_table_privilege(current_user, 'model_budget_alert_events', 'INSERT')
+                AS "canInsertModelBudgetAlerts",
+              has_column_privilege(current_user, 'model_operations', 'status', 'UPDATE')
+                AS "canUpdateModelStatus",
+              has_column_privilege(current_user, 'model_operations', 'canonical_input', 'UPDATE')
+                AS "canUpdateModelCanonicalInput",
+              has_table_privilege(current_user, 'model_attempts', 'INSERT')
+                AS "canInsertModelAttempts",
+              has_column_privilege(
+                current_user,
+                'model_budget_accounts',
+                'reserved_micro_usd',
+                'UPDATE'
+              ) AS "canUpdateModelBudgetReservation",
+              has_column_privilege(
+                current_user,
+                'model_budget_accounts',
+                'kill_switch',
+                'UPDATE'
+              ) AS "canUpdateModelBudgetKillSwitch",
+              has_column_privilege(
+                current_user,
+                'model_budget_accounts',
+                'ceiling_micro_usd',
+                'UPDATE'
+              ) AS "canUpdateModelBudgetCeiling",
               has_table_privilege(current_user, 'telegram_delivery_recoveries', 'SELECT')
                 AS "canSelectTelegramDeliveryRecoveries",
               has_table_privilege(current_user, 'telegram_delivery_recoveries', 'INSERT')
@@ -143,8 +180,16 @@ describe("PostgreSQL migrations", () => {
         canUpdateChannelUnlink: true,
         canUpdateOutboxReceiptAttempts: true,
         canInsertMigrations: false,
+        canInsertModelAttempts: true,
+        canInsertModelBudgetAlerts: true,
+        canInsertModelOperations: true,
         canInsertTelegramDeliveryRecoveries: false,
         canUpdateOutboxPayload: false,
+        canUpdateModelBudgetCeiling: false,
+        canUpdateModelBudgetKillSwitch: true,
+        canUpdateModelBudgetReservation: true,
+        canUpdateModelCanonicalInput: false,
+        canUpdateModelStatus: true,
         canUpdateOutboxStatus: true,
         canUpdateTelegramDeliveryRecoveries: false,
         canUpdateUserTimezone: true,

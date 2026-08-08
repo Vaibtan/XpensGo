@@ -8,15 +8,18 @@ import {
 } from "cloudflare:test";
 import { PgClient } from "@effect/sql-pg";
 import { makePostgresInboundEventStoreLayer } from "@xpensego/adapters/postgres/inbound-event-store";
+import { makePostgresModelOperationStoreLayer } from "@xpensego/adapters/postgres/model-operation-store";
 import { makeIsolatedTestDatabase } from "@xpensego/adapters/postgres/isolated-test-database";
 import { runMigrations } from "@xpensego/adapters/postgres/migrations";
 import { CorrelationId } from "@xpensego/contracts/platform/correlation-id";
 import { OutboxJobV1 } from "@xpensego/contracts/platform/outbox-job";
 import { OutboxMessageId } from "@xpensego/contracts/platform/outbox-message-id";
+import { ModelOperationId } from "@xpensego/contracts/model/model-operation-job";
 import { acceptInboundEvent } from "@xpensego/domain/channel/accept-inbound-event";
 import { ExternalChannelEventId } from "@xpensego/domain/channel/inbound-event";
 import { UserId } from "@xpensego/domain/identity/user-id";
 import { LedgerId } from "@xpensego/domain/ledger/ledger-id";
+import { prepareModelOperation } from "@xpensego/domain/model/model-operation";
 import { platformFixtureIds } from "@xpensego/testing/platform/platform-fixtures";
 import { Effect, Redacted, Schema } from "effect";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -223,6 +226,88 @@ afterEach(async () => {
 });
 
 describe("API Worker outbox integration", () => {
+  it("converges duplicate model Queue wake-ups on one persisted deterministic attempt", async () => {
+    const operationId = Schema.decodeUnknownSync(ModelOperationId)(
+      "913c7c0b-b6f9-47f2-8174-a8267edc9bba",
+    );
+    const storeLayer = makePostgresModelOperationStoreLayer(testDatabase.runtimeUrl);
+    await Effect.runPromise(
+      prepareModelOperation({
+        canonicalInput: "Synthetic purchase INR 123.45 at Synthetic Grocer",
+        inputDigest: "b210bc2b392265c489c8f87f9ba607d1868896da59676c08dfd194057695e4d2",
+        operation: "transaction.extract.v1",
+        operationId,
+        provider: "deterministic",
+        userId: fixtureIds.ownerUserId,
+      }).pipe(Effect.provide(storeLayer), Effect.scoped),
+    );
+    const job = {
+      version: 1,
+      kind: "model.operation.ready",
+      operationId,
+      correlationId: fixtureIds.correlationId,
+    } as const;
+    const batch = createMessageBatch("xpensego-platform-jobs-development", [
+      {
+        id: "model-operation-first",
+        timestamp: new Date("2026-08-08T00:00:00.000Z"),
+        attempts: 1,
+        body: job,
+      },
+      {
+        id: "model-operation-duplicate",
+        timestamp: new Date("2026-08-08T00:00:00.001Z"),
+        attempts: 1,
+        body: job,
+      },
+    ]);
+    const context = createExecutionContext();
+    await worker.queue(batch, makeIntegrationEnv(new RecordingQueue()), context);
+    const queueResult = await getQueueResult(batch, context);
+    expect(queueResult.explicitAcks.length + queueResult.retryMessages.length).toBe(2);
+    expect(queueResult.explicitAcks.length).toBeGreaterThanOrEqual(1);
+
+    if (queueResult.retryMessages.length > 0) {
+      const redelivery = createMessageBatch("xpensego-platform-jobs-development", [
+        {
+          id: "model-operation-redelivery",
+          timestamp: new Date("2026-08-08T00:00:01.000Z"),
+          attempts: 2,
+          body: job,
+        },
+      ]);
+      const redeliveryContext = createExecutionContext();
+      await worker.queue(redelivery, makeIntegrationEnv(new RecordingQueue()), redeliveryContext);
+      expect((await getQueueResult(redelivery, redeliveryContext)).explicitAcks).toEqual([
+        "model-operation-redelivery",
+      ]);
+    }
+
+    const [persisted] = await Effect.runPromise(
+      Effect.gen(function* () {
+        const sql = yield* PgClient.PgClient;
+        return yield* sql<{
+          readonly amountMinor: string;
+          readonly attemptCount: string;
+          readonly status: string;
+        }>`
+          SELECT
+            operation.result_json -> 'outcome' ->> 'amountMinor' AS "amountMinor",
+            (SELECT COUNT(*)::text FROM model_attempts WHERE operation_id = operation.id)
+              AS "attemptCount",
+            operation.status
+          FROM model_operations AS operation
+          WHERE operation.id = ${operationId}
+        `;
+      }).pipe(Effect.provide(migrationClientLayer), Effect.scoped),
+    );
+    expect(persisted).toEqual({
+      amountMinor: "12345",
+      attemptCount: "1",
+      status: "succeeded",
+    });
+  });
+
   it("accepts and deduplicates a verified Telegram update before background Queue publication", async () => {
     const queue = new RecordingQueue();
     const integrationEnv = makeIntegrationEnv(queue);

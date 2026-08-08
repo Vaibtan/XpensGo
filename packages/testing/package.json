@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./model/model-gateway-corpus": "./src/model/model-gateway-corpus.ts",
     "./platform/platform-fixtures": "./src/platform/platform-fixtures.ts"
   },
   "scripts": {

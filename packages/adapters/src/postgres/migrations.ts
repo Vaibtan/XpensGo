@@ -12,6 +12,7 @@ import { identityFoundationMigration } from "./migrations/0007-identity-foundati
 import { telegramIngressMigration } from "./migrations/0008-telegram-ingress.js";
 import { telegramProcessingMigration } from "./migrations/0009-telegram-processing.js";
 import { telegramDeliveryRecoveryMigration } from "./migrations/0010-telegram-delivery-recovery.js";
+import { modelOperationsMigration } from "./migrations/0011-model-operations.js";
 
 const migrationProgram = Migrator.make({})({
   loader: Migrator.fromRecord({
@@ -25,6 +26,7 @@ const migrationProgram = Migrator.make({})({
     "0008_telegram_ingress": telegramIngressMigration,
     "0009_telegram_processing": telegramProcessingMigration,
     "0010_telegram_delivery_recovery": telegramDeliveryRecoveryMigration,
+    "0011_model_operations": modelOperationsMigration,
   }),
   table: "xpensego_migrations",
 });

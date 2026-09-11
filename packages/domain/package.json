@@ -42,6 +42,6 @@
     "@xpensego/config": "0.1.0",
     "@xpensego/testing": "0.1.0",
     "typescript": "6.0.3",
-    "vitest": "4.1.10"
+    "vitest": "4.1.11"
   }
 }

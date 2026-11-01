@@ -43,7 +43,7 @@
     "@xpensego/contracts": "0.1.0",
     "@xpensego/domain": "0.1.0",
     "ai": "7.0.48",
-    "better-auth": "1.6.25",
+    "better-auth": "1.7.7",
     "effect": "3.22.1",
     "pg": "8.22.0"
   },
